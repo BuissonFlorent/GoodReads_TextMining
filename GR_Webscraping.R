@@ -8,7 +8,6 @@ library("tm")
 library("SnowballC")
 library("RColorBrewer")
 library("wordcloud")
-library("stringr")
 library(RSelenium)
 
 
@@ -32,7 +31,8 @@ for(t in 1:16){
   reviews_text <- lapply(reviews_html, function(x){read_html(x) %>% html_text()} )
   reviews_text2 <- gsub("\n|[ \t]+"," ",reviews_text)
   reviews_text3 <- gsub("\\*|\\'","",reviews_text2)
-  reviews_text4<- gsub("[^A-Za-z\\-]"," ",reviews_text3)
+  # WARNING: added the period in following row, untested
+  reviews_text4<- gsub("[^A-Za-z\\-\\.]"," ",reviews_text3) 
   reviews_text5 <- gsub(" {2,}"," ",reviews_text4)
   reviews_text6 <- gsub("\"{1,}","\'",reviews_text5)
   reviews_text7 <- gsub("review of another edition","",reviews_text6)
@@ -47,7 +47,8 @@ for(t in 1:16){
     reviews_df$book[j]="Me Before You"
     
     #Isolating the name of the author of the review
-    auth_rat_sep=regexpr(" rated it ",reviews_clean[2*j-1])
+    # WARNING: the options beyond "rated it" are untested
+    auth_rat_sep=regexpr(" rated it | marked it | added it ",reviews_clean[2*j-1])
     reviews_df$author[j]=substr(reviews_clean[2*j-1],5,auth_rat_sep-1)
     
     #Isolating and coding the rating
