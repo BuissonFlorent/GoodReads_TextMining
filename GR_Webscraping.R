@@ -12,8 +12,7 @@ library(RSelenium)
 
 
 startServer()
-url <- "https://www.goodreads.com/book/show/15507958-me-before-you#other_reviews"
-
+url <- "https://www.goodreads.com/book/show/11870085-the-fault-in-our-stars#other_reviews"
 remDr <- remoteDriver(browserName="firefox", port=4444) # instantiate remote driver to connect to Selenium Server
 remDr$open() # open web browser
 remDr$navigate(url)
@@ -22,7 +21,7 @@ global_df <- data.frame(book=character(),author=character(),rating=character(),r
 
 
 # Main loop going through the website pages
-for(t in 1:16){
+for(t in 1:6){
   
   #Extracting the reviews from the page
   reviews <- remDr$findElements("css selector", "#bookReviews .stacked")
@@ -37,14 +36,14 @@ for(t in 1:16){
   reviews_text6 <- gsub("\"{1,}","\'",reviews_text5)
   reviews_text7 <- gsub("review of another edition","",reviews_text6)
   reviews_clean = unlist(reviews_text7) 
-  #write.csv(reviews_clean, "output.csv")
+  write.csv(reviews_clean, "output.csv")
   
   n=floor(length(reviews)/2)
   reviews_df=data.frame(book=character(n),author=character(n),rating=character(n),review=character(n), stringsAsFactors = F)
   
   # Populating a data frame with the relevant fields
   for(j in 1:n){
-    reviews_df$book[j]="Me Before You"
+    reviews_df$book[j]="The Fault In Our Stars"
     
     #Isolating the name of the author of the review
     # WARNING: the options beyond "rated it" are untested
@@ -75,8 +74,4 @@ for(t in 1:16){
 }   
 #end of the main loop
 
-write.csv(global_df,"goodreads_MBY.csv")
-
-##### Next steps #####
-
-#Scraping all the following reviews
+write.csv(global_df,"goodreads_TFIOS.csv")
