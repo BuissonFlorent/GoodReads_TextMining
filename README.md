@@ -10,12 +10,9 @@ Part 1: webscraping
 
 
 Part 2: Exploratory Data Analysis (EDA) and sentiment analysis
-
-GR_article_part2.Rmd = R markdown of the article
-
-GR_article_part2.html = html of the article
-
-GR_EDA_SentimentAnalysis.R = R script of the analyses
+- GR_article_part2.Rmd = R markdown of the article
+- GR_article_part2.html = html of the article
+- GR_EDA_SentimentAnalysis.R = R script of the analyses
 
 Part 3: Predictive Analytics / Machine learning
-GR_MachineLearning.R = R script of the analyses (work in progress!)
+- GR_MachineLearning.R = R script of the analyses (work in progress!)
