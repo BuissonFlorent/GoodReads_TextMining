@@ -202,11 +202,10 @@ hist(data$review_length, ylim = c(0,3000), main = &quot;Distribution of review l
   filter(lexicon == &quot;AFINN&quot;) %&gt;%
   select(word, afinn_score = score)
 head(AFINN)</code></pre>
-<p>We then “tidy up” our dataset by making it “tall” (one word per row), and removing stopwords as well as the language and authors columns which are useless at this point.</p>
+<p>We then “tidy up” our dataset by making it “tall” (one word per row).</p>
 <pre class="r"><code># &quot;tidying&quot; up the data (1 word per row)
 review_words &lt;- data %&gt;%
-  unnest_tokens(word, review) %&gt;%
-  filter(!word %in% stop_words$word)</code></pre>
+  unnest_tokens(word, review)</code></pre>
 <p>Our data now looks like this:</p>
 <table>
 <thead>

@@ -65,8 +65,7 @@ head(AFINN)
 
 # "tidying" up the data (1 word per row)
 review_words <- data %>%
-  unnest_tokens(word, review) %>%
-  filter(!word %in% stop_words$word)
+  unnest_tokens(word, review)
 
 # "lookup" the words in the sentiment lexicon and grouping by mean for observation 
 review_mean_sentiment <- review_words %>%
@@ -118,9 +117,9 @@ word_mean_summaries <- review_words %>%
   arrange(average_rating)
 
 # comparing AFINN score with average rating of reviews, per word
-words_mean_afinn <- word_mean_summaries %>%
+word_mean_afinn <- word_mean_summaries %>%
   inner_join(AFINN)
-ggplot(words_mean_afinn, aes(afinn_score, average_rating, group = afinn_score)) +
+ggplot(word_mean_afinn, aes(afinn_score, average_rating, group = afinn_score)) +
   geom_boxplot() +
   xlab("AFINN score of word") +
   ylab("Mean rating of reviews with this word")
