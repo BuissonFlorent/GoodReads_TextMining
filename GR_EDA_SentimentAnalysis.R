@@ -33,12 +33,10 @@ data$rating[data$rating=='really liked it']=4
 data$rating[data$rating=='it was amazing']=5
 data$rating=as.integer(data$rating)
 
-# Removing the language variable and adding a review_id column
+# Removing the language and author variables and adding a review_id column
 data$language=NULL
+data$author=NULL
 data$review_id=1:nrow(data)
-
-# Writing the data to file for future analyses
-write.csv(data, "GoodReadsCleanData.csv", row.names = FALSE)
 
 ### Exploratory data analysis ### 
 
@@ -46,15 +44,15 @@ write.csv(data, "GoodReadsCleanData.csv", row.names = FALSE)
 barplot(table(as.factor(data$rating)),ylim = c(0,5000), main = "Distribution of ratings")
 
 #Looking at the distribution of review lengths, and removing the longest reviews
-hist(nchar(data$review), ylim = c(0,5000), main = "Distribution of review length" )
-n=nrow(data[nchar(data$review)>=8000])
+data$review_length = nchar(data$review)
+hist(data$review_length, ylim = c(0,5000), main = "Distribution of review length" )
+n=nrow(data[data$review_length>=8000])
 #Removing the reviews with more than 8000 characters
-data=data[nchar(data$review)<=8000]
-hist(nchar(data$review), ylim = c(0,3000), main = "Distribution of review length" )
+data=data[data$review_length<=8000]
+hist(data$review_length, ylim = c(0,3000), main = "Distribution of review length" )
 
 # Boxplot of review length by rating
-l=nchar(data$review)
-boxplot(l~data$rating, main = "Distribution of review length by rating")
+with(data, boxplot(review_length~rating, main = "Distribution of review length by rating"))
 
 
 ### Sentiment analysis with tidytext ###
@@ -67,35 +65,51 @@ head(AFINN)
 
 # "tidying" up the data (1 word per row)
 review_words <- data %>%
-  select(-c(language, author)) %>%
   unnest_tokens(word, review) %>%
   filter(!word %in% stop_words$word)
 
 # "lookup" the words in the sentiment lexicon and grouping by mean for observation 
 review_mean_sentiment <- review_words %>%
   inner_join(AFINN, by = "word") %>%
-  group_by(obs, rating) %>%
-  summarize(sentiment = mean(afinn_score))
+  group_by(review_id, rating) %>%
+  summarize(mean_sentiment = mean(afinn_score))
+
 # Plotting the result
 theme_set(theme_bw())
-ggplot(review_mean_sentiment, aes(rating, sentiment, group = rating)) +
+ggplot(review_mean_sentiment, aes(rating, mean_sentiment, group = rating)) +
   geom_boxplot() +
   ylab("Average sentiment score")
+
+# Transferring the results to our dataset
+review_mean_sentiment <- review_mean_sentiment %>%
+  select(-rating) %>%
+  data.table()
+clean_data <- data %>%
+  left_join(review_mean_sentiment, by = "review_id")
+
 
 # Same as previous, but with the median
 review_median_sentiment <- review_words %>%
   inner_join(AFINN, by = "word") %>%
-  group_by(obs, rating) %>%
-  summarize(sentiment = median(afinn_score))
+  group_by(review_id, rating) %>%
+  summarize(median_sentiment = median(afinn_score))
 theme_set(theme_bw())
-ggplot(review_median_sentiment, aes(rating, sentiment, group = rating)) +
+ggplot(review_median_sentiment, aes(rating, median_sentiment, group = rating)) +
   geom_boxplot() +
   ylab("Median sentiment score")
+# Transferring the results to our dataset
+review_median_sentiment <- review_median_sentiment %>%
+  select(-rating) %>%
+  data.table()
+clean_data <- clean_data %>%
+  left_join(review_median_sentiment, by = "review_id")
 
+# Writing the data to file for future analyses
+write.csv(clean_data, "GoodReadsCleanData.csv", row.names = FALSE)
 
 # Summarizing words by number of uses and average rating of review
 word_mean_summaries <- review_words %>%
-  count(obs, rating, word) %>%
+  count(review_id, rating, word) %>%
   group_by(word) %>%
   summarize(reviews = n(),
             uses = sum(n),

@@ -11,7 +11,7 @@ knitr::opts_chunk$set(echo = TRUE)
 
 # Introduction
 
-After scraping reviews from Goodreads in the first installment of this series, we are now ready to do some exploratory data analysis to get a better sense of the data we have.
+After scraping reviews from Goodreads in the first installment of this series, we are now ready to do some exploratory data analysis to get a better sense of the data we have. This will also allow us to create features that we will use in future analyses
 
 ## Part 2: Exploratory data analysis and sentiment analysis
 
@@ -52,7 +52,7 @@ data=data[rating %in% c('did not like it','it was ok','liked it','really liked i
 data=data[length(data$review)>=5]
 ```
 
-Finally, we recode the ratings in numerical format, remove the language column which is now useless, and add a review_id column (to be able to identify to which review a word belongs).
+Finally, we recode the ratings in numerical format, remove the language and author columns which are useless for now, and add a review_id column (to be able to identify to which review a word belongs).
 
 ```{r, eval=FALSE}
 data$rating[data$rating=='did not like it']=1
@@ -63,13 +63,8 @@ data$rating[data$rating=='it was amazing']=5
 data$rating=as.integer(data$rating)
 
 data$language=NULL
+data$author=NULL
 data$review_id=1:nrow(data)
-```
-
-The data is clean, we can save it to a file for future use.
-
-```{r, eval = FALSE}
-write.csv(data, "GoodReadsCleanData.csv", row.names = FALSE)
 ```
 
 With that, we are now ready to start exploratory data analysis!
@@ -87,7 +82,8 @@ barplot(table(as.factor(data$rating)),ylim = c(0,5000), main = "Distribution of 
 Let's take a look at the distribution of the length of reviews.
 
 ```{r, eval=FALSE}
-hist(nchar(data$review), ylim = c(0,5000), main = "Distribution of review length" )
+data$review_length = nchar(data$review)
+hist(data$review_length, ylim = c(0,5000), main = "Distribution of review length" )
 ```
 
 ![](Histogram1.png)
@@ -95,9 +91,10 @@ hist(nchar(data$review), ylim = c(0,5000), main = "Distribution of review length
 Now that's a long tail! A quick calculation let us know that there are only 45 reviews that are more than 8000 character long. Let's get rid of them, to avoid skewing our analyses (e.g. if one of these reviews uses a lot a word, it could bias the weight for that word).
 
 ```{r, eval=FALSE}
-n=nrow(data[nchar(data$review)>=8000])
-data=data[nchar(data$review)<=8000]
-hist(nchar(data$review), ylim = c(0,3000), main = "Distribution of review length" )
+n=nrow(data[data$review_length>=8000])
+data=data[data$review_length<=8000]
+hist(data$review_length, ylim = c(0,3000), main = "Distribution of review length" )
+
 ```
 
 ![](Histogram2.png)
@@ -105,10 +102,8 @@ hist(nchar(data$review), ylim = c(0,3000), main = "Distribution of review length
 This looks better. Finally, let's take a look at the distribution of review length by rating. 
 
 ```{r, eval=FALSE}
-l=nchar(data$review)
-boxplot(l~data$rating, main = "Distribution of review length by rating")
+with(data, boxplot(review_length~rating, main = "Distribution of review length by rating"))
 ```
-
 
 ![](Boxplot1.png)
 
@@ -130,67 +125,92 @@ We then "tidy up" our dataset by making it "tall" (one word per row), and removi
 ```{r, eval=FALSE}
 # "tidying" up the data (1 word per row)
 review_words <- data %>%
-  select(-c(language, author)) %>%
   unnest_tokens(word, review) %>%
   filter(!word %in% stop_words$word)
 ```
 
-Our data now looks like this (remember that obs is the review id):
+Our data now looks like this:
 
-book           | rating | obs | word         |
----------------|--------|-----|--------------|
-Eleanor & Park | 5      | 1   | experienced  |
-Eleanor & Park | 5      | 1   | love         |
-Eleanor & Park | 5      | 1   | heart        |
+book           | rating | review_id | word         |
+---------------|--------|-----------|--------------|
+Eleanor & Park | 5      | 1         | experienced  |
+Eleanor & Park | 5      | 1         | love         |
+Eleanor & Park | 5      | 1         | heart        |
 
 We can assign a positivity/negativity "score" to each review by looking up in the lexicon the score of all the words in a review and calculating the average score for the review.
 
 ```{r, eval=FALSE}
 review_mean_sentiment <- review_words %>%
   inner_join(AFINN, by = "word") %>%
-  group_by(obs, rating) %>%
-  summarize(sentiment = mean(afinn_score))
+  group_by(review_id, rating) %>%
+  summarize(mean_sentiment = mean(afinn_score))
 ```
 
 The outcome looks like this:
 
-obs | rating | sentiment |
-----|--------|-----------|
-1   | 5      | 0.9444    |
-2   | 3      | -0.093    |
-3   | 5      | -1.17     |
+review_id | rating | sentiment |
+----------|--------|-----------|
+ 1        | 5      | 0.9444    |
+ 2        | 3      | -0.093    |
+ 3        | 5      | -1.17     |
 
 So, how does the average sentiment score vary by rating?
 
 ```{r, eval=FALSE}
 theme_set(theme_bw())
-ggplot(review_mean_sentiment, aes(rating, sentiment, group = rating)) +
+ggplot(review_mean_sentiment, aes(rating, mean_sentiment, group = rating)) +
   geom_boxplot() +
   ylab("Average sentiment score")
 ```
 
 ![](Boxplot_mean_sentiment.png)
 
-We're onto something! Visually at least, we can see a difference across ratings, with the sentiment score for 1-star reviews being squarely negative and the sentiment score for 5-star reviews being squarely positive. The difference is even clearer if we take the median score instead of the mean:
+We're onto something! Visually at least, we can see a difference across ratings, with the sentiment score for 1-star reviews being squarely negative and the sentiment score for 5-star reviews being squarely positive. Let's create a new dataset to integrate this feature for future use.
+
+```{r, eval = FALSE}
+review_mean_sentiment <- review_mean_sentiment %>%
+  select(-rating) %>% # We remove the rating here to avoid duplicating it
+  data.table()
+clean_data <- data %>%
+  left_join(review_mean_sentiment, by = "review_id")
+```
+
+The difference between ratings is even clearer if we take the median score instead of the mean:
 
 ```{r, eval=FALSE}
 review_median_sentiment <- review_words %>%
   inner_join(AFINN, by = "word") %>%
-  group_by(obs, rating) %>%
-  summarize(sentiment = median(afinn_score))
+  group_by(review_id, rating) %>%
+  summarize(median_sentiment = median(afinn_score))
 theme_set(theme_bw())
-ggplot(review_median_sentiment, aes(rating, sentiment, group = rating)) +
+ggplot(review_median_sentiment, aes(rating, median_sentiment, group = rating)) +
   geom_boxplot() +
   ylab("Median sentiment score")
 ```
 
 ![](Boxplot_median_sentiment.png)
 
-We are now going to slice our data the other way around, aggregating not by review but by word. First, for each word, we are going to count in how many reviews it appears and how many times it appears overall, as well as calculate the average rating of the reviews in which it appears. Finally, we filter our data to keep only the words that appears in at least 3 reviews, to avoid words that would be peculiar to a specific reviewer.
+Again, let's transfer this feature to our new dataset.
+
+```{r, eval = FALSE}
+review_median_sentiment <- review_median_sentiment %>%
+  select(-rating) %>%
+  data.table()
+clean_data <- clean_data %>%
+  left_join(review_median_sentiment, by = "review_id")
+```
+
+Finally, we save our data to a file for future use.
+
+```{r, eval = FALSE}
+write.csv(clean_data, "GoodReadsCleanData.csv", row.names = FALSE)
+```
+
+Just for exploratory purposes, we are now going to slice our data the other way around, aggregating not by review but by word. First, for each word, we are going to count in how many reviews it appears and how many times it appears overall, as well as calculate the average rating of the reviews in which it appears. Finally, we filter our data to keep only the words that appears in at least 3 reviews, to avoid words that would be peculiar to a specific reviewer.
 
 ```{r, eval=FALSE}
 word_mean_summaries <- review_words %>%
-  count(obs, rating, word) %>%
+  count(review_id, rating, word) %>%
   group_by(word) %>%
   summarize(reviews = n(),
             uses = sum(n),
