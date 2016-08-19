@@ -135,11 +135,15 @@ $(document).ready(function () {
 <p>We start by loading the libraries and the data from part 1, that I have consolidated in one file.</p>
 <pre class="r"><code>library(data.table)
 library(dplyr)
-library(tidytext)
-library(RTextTools)
+library(ggplot2)
+library(stringr)
+library(tm)
+library(magrittr)
 library(textcat)
-library(ggplot2)</code></pre>
-<pre class="r"><code>data = read.csv(&quot;GoodReadsData.csv&quot;)</code></pre>
+library(tidytext)
+library(RTextTools)</code></pre>
+<pre class="r"><code>data = read.csv(&quot;GoodReadsData.csv&quot;, stringsAsFactors = FALSE)
+data=data.table(data)</code></pre>
 <p>After a quick inspection of the data, we realize that some reviews are not in english. We get rid of them.</p>
 <pre class="r"><code>data$language=as.factor(textcat(data$review))
 data=data[language==&quot;english&quot;]</code></pre>
@@ -147,13 +151,18 @@ data=data[language==&quot;english&quot;]</code></pre>
 <p>We then exclude all non-standard ratings and remove all reviews that are too short.</p>
 <pre class="r"><code>data=data[rating %in% c('did not like it','it was ok','liked it','really liked it','it was amazing')]
 data=data[length(data$review)&gt;=5]</code></pre>
-<p>Finally, we recode the ratings in numerical format.</p>
+<p>Finally, we recode the ratings in numerical format, remove the language column which is now useless, and add a review_id column (to be able to identify to which review a word belongs).</p>
 <pre class="r"><code>data$rating[data$rating=='did not like it']=1
 data$rating[data$rating=='it was ok']=2
 data$rating[data$rating=='liked it']=3
 data$rating[data$rating=='really liked it']=4
 data$rating[data$rating=='it was amazing']=5
-data$rating=as.integer(data$rating)</code></pre>
+data$rating=as.integer(data$rating)
+
+data$language=NULL
+data$review_id=1:nrow(data)</code></pre>
+<p>The data is clean, we can save it to a file for future use.</p>
+<pre class="r"><code>write.csv(data, &quot;GoodReadsCleanData.csv&quot;, row.names = FALSE)</code></pre>
 <p>With that, we are now ready to start exploratory data analysis!</p>
 </div>
 <div id="exploratory-data-analysis" class="section level1">
@@ -179,11 +188,13 @@ hist(nchar(data$review), ylim = c(0,3000), main = &quot;Distribution of review l
 
 </div>
 <p>This looks better. Finally, let’s take a look at the distribution of review length by rating.</p>
+<pre class="r"><code>l=nchar(data$review)
+boxplot(l~data$rating, main = &quot;Distribution of review length by rating&quot;)</code></pre>
 <div class="figure">
 <img src="data:image/png;base64,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" alt />
 
 </div>
-<p>Visually, more positive reviews appear to be slightly shorter than more negative reviews, but there’s no definite trend. Let’s turn to sentiment analysis, by replicating <em>mutatis mutandis</em> <a href="https://www.r-bloggers.com/does-sentiment-analysis-work-a-tidy-analysis-of-yelp-reviews/">the analyses of David Robinson on Yelp’s reviews</a>.</p>
+<p>Visually, more positive reviews appear to be slightly shorter than more negative reviews, but there’s no definite trend. Let’s turn to sentiment analysis, by replicating <em>mutatis mutandis</em> <a href="https://www.r-bloggers.com/does-sentiment-analysis-work-a-tidy-analysis-of-yelp-reviews/">the analyses of David Robinson on Yelp’s reviews</a> using the <em>tidytext</em> package.</p>
 </div>
 <div id="sentiment-analysis" class="section level1">
 <h1>Sentiment analysis</h1>

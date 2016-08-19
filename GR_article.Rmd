@@ -175,4 +175,4 @@ The result data frame looks like this:
 |The time traveler's wife | Danielle | did not like it | Why can t there be...  |
 |The time traveler's wife | Swaps    | it was amazing  | This review has been...|
 
-You can find the full code, including the loops I have omitted here, on [my GitHub](https://github.com/BuissonFlorent/GoodReads_TextMining)
+You can find the full code, including the loops I have omitted here, on [my GitHub](https://github.com/BuissonFlorent/GoodReads_TextMining).

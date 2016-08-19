@@ -12,7 +12,8 @@ library(textcat)
 library(tidytext)
 library(RTextTools)
 
-data = read.csv("GoodReadsData.csv")
+data = read.csv("GoodReadsData.csv", stringsAsFactors = FALSE)
+data=data.table(data)
   
 # Selecting only the reviews in english
 data$language=as.factor(textcat(data$review))
@@ -31,6 +32,13 @@ data$rating[data$rating=='liked it']=3
 data$rating[data$rating=='really liked it']=4
 data$rating[data$rating=='it was amazing']=5
 data$rating=as.integer(data$rating)
+
+# Removing the language variable and adding a review_id column
+data$language=NULL
+data$review_id=1:nrow(data)
+
+# Writing the data to file for future analyses
+write.csv(data, "GoodReadsCleanData.csv", row.names = FALSE)
 
 ### Exploratory data analysis ### 
 
