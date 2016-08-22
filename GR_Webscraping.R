@@ -13,7 +13,7 @@ remDr <- remoteDriver(browserName="firefox", port=4444) # instantiate remote dri
 remDr$open() # open web browser
 remDr$navigate(url)
 
-global_df <- data.frame(book=character(),author=character(),rating=character(),review=character(), stringsAsFactors = F)
+global_df <- data.frame(book=character(),reviewer=character(),rating=character(),review=character(), stringsAsFactors = F)
 
 # Main loop going through the website pages
 for(t in 1:98){
@@ -29,7 +29,7 @@ for(t in 1:98){
   reviews_clean <- gsub("\n|[ \t]+"," ",reviews_text2)  # Removing the end of line characters and extra spaces
   
   n=floor(length(reviews)/2)
-  reviews_df=data.frame(book=character(n),author=character(n),rating=character(n),review=character(n), stringsAsFactors = F)
+  reviews_df=data.frame(book=character(n),reviewer=character(n),rating=character(n),review=character(n), stringsAsFactors = F)
   
   # Populating a data frame with the relevant fields
   for(j in 1:n){
@@ -37,7 +37,7 @@ for(t in 1:98){
     
     #Isolating the name of the author of the review
     auth_rat_sep=regexpr(" rated it | marked it | added it ",reviews_clean[2*j-1])
-    reviews_df$author[j]=substr(reviews_clean[2*j-1],5,auth_rat_sep-1)
+    reviews_df$reviewer[j]=substr(reviews_clean[2*j-1],5,auth_rat_sep-1)
     
     #Isolating the rating
     rat_end=regexpr("· | Shelves| Recommend| review of another edition",reviews_clean[2*j-1])

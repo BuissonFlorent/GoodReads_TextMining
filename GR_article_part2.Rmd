@@ -1,5 +1,5 @@
 ---
-title: "GoodReads: webscraping and text analysis with R: part 2"
+title: "GoodReads: Webscraping and Text Analysis with R: Part 2"
 author: "Florent Buisson"
 date: "August 17, 2016"
 output: html_document
@@ -11,7 +11,7 @@ knitr::opts_chunk$set(echo = TRUE)
 
 # Introduction
 
-After scraping reviews from Goodreads in the first installment of this series, we are now ready to do some exploratory data analysis to get a better sense of the data we have. This will also allow us to create features that we will use in future analyses
+After scraping reviews from Goodreads in the first installment of this series, we are now ready to do some exploratory data analysis to get a better sense of the data we have. This will also allow us to create features that we will use in future analyses.
 
 ## Part 2: Exploratory data analysis and sentiment analysis
 
@@ -36,7 +36,7 @@ data = read.csv("GoodReadsData.csv", stringsAsFactors = FALSE)
 data=data.table(data)
 ```
 
-After a quick inspection of the data, we realize that some reviews are not in english. We get rid of them. 
+After a quick inspection of the data, we realize that some reviews are not in English. We get rid of them. 
 
 ```{r, eval=FALSE}
 data$language=as.factor(textcat(data$review))
@@ -45,14 +45,14 @@ data=data[language=="english"]
 
 The language detection algorithm is not great and reclassifies some reviews in weird languages (6 breton? 9 rumantsch?? 103 middle frisian???), but that's good enough for what we want to do. 
 
-We then exclude all non-standard ratings and remove all reviews that are too short.
+Then we exclude all ratings that do not correspond to a 1 to 5 star rating (such as "currently reading it", or an empty rating) and all reviews that are too short.
 
 ```{r, eval=FALSE}
 data=data[rating %in% c('did not like it','it was ok','liked it','really liked it','it was amazing')]
 data=data[length(data$review)>=5]
 ```
 
-Finally, we recode the ratings in numerical format, remove the language and author columns which are useless for now, and add a review_id column (to be able to identify to which review a word belongs).
+Finally, we recode the ratings in numerical format, remove the language and reviewer columns that we won't be using anymore, and add a review_id column (to be able to identify to which review a word belongs).
 
 ```{r, eval=FALSE}
 data$rating[data$rating=='did not like it']=1
@@ -111,7 +111,7 @@ Visually, more positive reviews appear to be slightly shorter than more negative
 
 # Sentiment analysis
 
-In this section, we are going to use the "positive" or "negative" aspect of words to see if it correlates with the ratings. In order to do that, we need to start by establishing a lexicon of words with a positive/negative score. 
+In this section, we are going to use the "positive" or "negative" aspect of words (from the *sentiments* dataset within the *tidytext* package) to see if it correlates with the ratings. In order to do that, we need to start by establishing a lexicon of words with a positive/negative score. 
 
 ```{r, eval=FALSE}
 AFINN <- sentiments %>%
@@ -130,11 +130,11 @@ review_words <- data %>%
 
 Our data now looks like this:
 
-book           | rating | review_id | word         |
----------------|--------|-----------|--------------|
-Eleanor & Park | 5      | 1         | experienced  |
-Eleanor & Park | 5      | 1         | love         |
-Eleanor & Park | 5      | 1         | heart        |
+book            | rating | review_id | word         |
+----------------|--------|-----------|--------------|
+Eleanor & Park  | 5      | 1         | experienced  |
+It ends with us | 3      | 3381      | skipped      |
+Me Before You   | 1      | 8090      | hated        |
 
 We can assign a positivity/negativity "score" to each review by looking up in the lexicon the score of all the words in a review and calculating the average score for the review.
 

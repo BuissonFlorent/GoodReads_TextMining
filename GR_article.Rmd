@@ -1,5 +1,5 @@
 ---
-title: "GoodReads: webscraping and text analysis with R"
+title: "GoodReads: Webscraping and Text Analysis with R: Part 1"
 author: "Florent Buisson"
 date: "August 16, 2016"
 output: html_document
@@ -11,17 +11,17 @@ knitr::opts_chunk$set(echo = TRUE)
 
 ## Introduction
 
-Inspired by [this article about webscraping](http://zevross.com/blog/2015/05/19/scrape-website-data-with-the-new-r-package-rvest/) and [this article about sentiment analysis](http://varianceexplained.org/r/yelp-sentiment/), I decided to get my hands dirty by scraping and analyzing a sample of reviews on the website [Goodreads](goodreads.com).
+Inspired by [this article about sentiment analysis](http://varianceexplained.org/r/yelp-sentiment/) and [this guide to webscraping](http://zevross.com/blog/2015/05/19/scrape-website-data-with-the-new-r-package-rvest/), I have decided to get my hands dirty by scraping and analyzing a sample of reviews on the website [Goodreads](goodreads.com).
 
 
-The goal of this article is to demonstrate a complete example, going from data collection to machine learning analysis, and to illustrate a few of the dead ends and mistakes I encountered on my journey. We'll be looking at the reviews for five popular romance books. I have voluntarily chosen books in the same genre in order to make comments text more homogeneous *a priori*; these five books are popular enough that I can easily pull a few thousands reviews for each, yielding a significant corpus with minimum effort. If you don't like romance books, feel free to replicate the analysis with your genre of choice!
+The goal of this project is to demonstrate a complete example, going from data collection to machine learning analysis, and to illustrate a few of the dead ends and mistakes I encountered on my journey. We'll be looking at the reviews for five popular romance books. I have voluntarily chosen books in the same genre in order to make comments text more homogeneous *a priori*; these five books are popular enough that I can easily pull a few thousands reviews for each, yielding a significant corpus with minimum effort. If you don't like romance books, feel free to replicate the analysis with your genre of choice!
 
 
 To make the article more digestible, I have divided it in three segments:
 
-* part 1: Webscraping
-* part 2: Exploratory data analysis and sentiment analysis
-* part 3: Predictive analytics with machine learning
+* Part 1: Webscraping
+* Part 2: Exploratory data analysis and sentiment analysis
+* Part 3: Predictive analytics with machine learning
 
 
 ## Part 1: Webscraping
@@ -44,9 +44,9 @@ BookTitle <- "The time traveler's wife"
 OutputFileName <- "GR_TimeTravelersWife.csv"
 ```
 
-Note that I'm working on a book-by-book basis. This means we have to manually change the variables above and re-run the script for each book. There is probably a way to automate that in order to work on a grander scale, but that's good enough for what I want to do here. Also, I'd rather not overload Goodreads's servers by pulling massive amounts of data from them. 
+Note that I'm working on a book-by-book basis. This means we have to manually change the variables above and re-run the script for each book. This could be automated to work on a grander scale, but that's good enough for what I want to do here. Also, I'd rather not overload Goodreads's servers by pulling massive amounts of data from them. 
 
-Let's finally start the RSelenium server. For some unknown reason, I have had some trouble with Firefox, and I have had to reinstall a previous version of the browser (which Firefox frowns upon). So your mileage may vary here. 
+Let's then start the RSelenium server. I have had some trouble with Firefox, and I have had to reinstall a previous version of the browser (which Firefox frowns upon), so your mileage may vary here. 
 
 ```{r server, eval=FALSE}
 startServer()
@@ -61,7 +61,7 @@ These instructions start an instance of Firefox and navigate to the url as if yo
 We then initialize the data frame that we'll be populating with the data later.
 
 ```{r df_initialization, eval=FALSE}
-global_df <- data.frame(book=character(),author=character(),rating=character(),review=character(), stringsAsFactors = F)
+global_df <- data.frame(book=character(),reviewer=character(),rating=character(),review=character(), stringsAsFactors = F)
 ```
 
 We are now ready to proceed with the webscraping process itself!
@@ -84,11 +84,11 @@ reviews_list <- lapply(reviews_html, function(x){read_html(x) %>% html_text()} )
 reviews_text <- unlist(reviews_list)
 ```
 
-We now have the text of the reviews in list format, but a rapid inspection of it shows that there is still a lot of work to do to get a clean text. This we will do by using regular expressions (*"regex"*).
+We now have the text of the reviews in list format, but a rapid inspection of it shows that there is still a lot of work to do to get a clean text. This we will do by using regular expressions (regex).
 
 # Cleaning the reviews with Regex
 
-In my (admittedly very limited) experience with text analytics, regex are both a blessing and a curse. A blessing because how else can you remove all non-letters characters in a string in one short command? And a curse because it's a fairly esoteric language that is hard to understand or remember when you re-read your code later. So I would definitely advise very generous commenting at the brief moment in time when you actually understand what your code does. 
+In my experience with text analytics, regex are both a blessing and a curse. A blessing because how else can you remove all non-letters characters in a string in one short command? And a curse because it's a fairly esoteric language that is hard to understand or remember when you re-read your code later. So if you are not familiar with regex, I would definitely advise very generous commenting at the brief moment in time when you actually understand what your code does. 
 
 ```{r, eval=FALSE}
 # Removing all characters that are not letters or dash
@@ -105,16 +105,23 @@ In order to write these commands, I have found these resources useful:
 
 # Putting the reviews in table format
 
-We now have our reviews in a reasonably clean state. But due to the underlying structure of the html code, we have a problem: for each review, we have the name of the reviewer and his/her rating in one string, and the review in the following string. In addition to that, the system to preview reviews means that the beginning of the review appears twice in the string. We'll have to clean all that, using again regex, to get our data in table format.
+We now have our reviews in a reasonably clean state. But due to the underlying structure of the html code, we have a problem: for each review, we have the name of the reviewer and his/her rating in one string, and the review in the following string. In addition to that, the system to preview reviews means that the beginning of the review appears twice in the string. We'll have to clean all that, again using regex, to get our data in table format.
 
 We start by counting the number of reviews we have, i.e. half the number of strings and creating a temporary data frame that we'll use to store the data before transferring it to the main data frame. 
 
 ```{r, eval=FALSE}
 n=floor(length(reviews)/2)
-reviews_df=data.frame(book=character(n),author=character(n),rating=character(n),review=character(n), stringsAsFactors = F)
+reviews_df=data.frame(book=character(n),reviewer=character(n),rating=character(n),review=character(n), stringsAsFactors = F)
 ```
 
-We loop through our strings and populate our data frame, by extracting the fields we want review by review, based on recurring stop words. Using a *for* loop doesn't feel right to me, but the commands are too complex for me to vectorialize them properly. We will have to make do with that. 
+We loop through our strings and populate our data frame, by extracting the fields we want review by review, based on recurring stop words. A *for* loop will do for this non-production example, but for production code you'd probably want to vectorialize everything you can. 
+
+The following code might appear a bit cryptic so first I'll explain what I'm going to do:
+
+* In the first part, I identify several expressions that can appear between the reviewer's name and the rating, and use them in a regex to determine the ending point of the name in the string, then extract the name.
+* In the second part, I identify several expressions that can appear at the end of the rating, and use them in a regex to determine the ending point of the rating; sometimes none of these expressions appear, so I have a conditional telling R to go to the end of the string if it finds none of the expressions (by convention, it returns the position as being -1). Then I extract the rating.
+* In the third part, I remove the beginning of each review, which is repeated in the html file, by looking for the position in the string where the first 50 characters of the string appear again. I have a conditional in place to deal with cases when the review is short enough that its beginning is not repeated. I deal with the end of the review in the same way I did with the end of the rating
+* Finally, note the structure of the loop: I'm not looping through the strings one by one, but through the reviews, each review taking 2 consecutive strings, hence the `2*j` and `2*j-1` indices. 
 
 ```{r, eval=FALSE}
 for(j in 1:n){
@@ -122,7 +129,7 @@ for(j in 1:n){
     
   #Isolating the name of the author of the review
   auth_rat_sep=regexpr(" rated it | marked it | added it ",reviews_clean[2*j-1]) 
-  reviews_df$author[j]=substr(reviews_clean[2*j-1],5,auth_rat_sep-1)
+  reviews_df$reviewer[j]=substr(reviews_clean[2*j-1],5,auth_rat_sep-1)
     
   #Isolating the rating
   rat_end=regexpr("· | Shelves| Recommend| review of another edition",reviews_clean[2*j-1])
@@ -138,14 +145,6 @@ for(j in 1:n){
   reviews_df$review[j]=substr(reviews_clean[2*j],rev_start,rev_end-1)
   }
 ```
-
-This part of the code might appear a bit cryptic so I'll explain it in more details:
-
-* In the first part, I have identified several expressions that can appear between the reviewer's name and the rating, and use them in a regex to determine the ending point of the name in the string, then extract the name.
-* In the second part, I have identified several expressions that can appear at the end of the rating, and use them in a regex to determine the ending point of the rating; sometimes none of these expressions appear, so I have a conditional telling R to go to the end of the string if it finds none of the expressions (by convention, it returns the position as being -1). Then I extract the rating.
-* In the third part, I remove the beginning of each review, which is repeated in the html file, by looking for the position in the string where the first 50 characters of the string appear again. I have a conditional in place to deal with cases when the review is short enough that its beginning is not repeated. I deal with the end of the review in the same way I did with the end of the rating
-* Finally, note the structure of the loop: I'm not looping through the strings one by one, but through the reviews, each review taking 2 consecutive strings, hence the `2*j` and `2*j-1` indices. 
-
 
 Now that our temporary data frame has been populated, we can transfer its content to our main data frame.
 
@@ -169,7 +168,7 @@ write.csv(global_df,OutputFileName)
 
 The result data frame looks like this:
 
-|book                     | author   | rating          | review                 |
+|book                     | reviewer | rating          | review                 |
 |-------------------------|----------|-----------------|------------------------|
 |The time traveler's wife | Liz S    | it was ok       | I recently read...     |
 |The time traveler's wife | Danielle | did not like it | Why can t there be...  |
