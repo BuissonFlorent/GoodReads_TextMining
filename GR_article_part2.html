@@ -160,7 +160,7 @@ data$rating[data$rating=='it was amazing']=5
 data$rating=as.integer(data$rating)
 
 data$language=NULL
-data$author=NULL
+data$reviewer=NULL
 data$review_id=1:nrow(data)</code></pre>
 <p>With that, we are now ready to start exploratory data analysis!</p>
 </div>
@@ -197,58 +197,72 @@ hist(data$review_length, ylim = c(0,3000), main = &quot;Distribution of review l
 </div>
 <div id="sentiment-analysis" class="section level1">
 <h1>Sentiment analysis</h1>
-<p>In this section, we are going to use the “positive” or “negative” aspect of words (from the <em>sentiments</em> dataset within the <em>tidytext</em> package) to see if it correlates with the ratings. In order to do that, we need to start by establishing a lexicon of words with a positive/negative score.</p>
-<pre class="r"><code>AFINN &lt;- sentiments %&gt;%
+<p>In this section, we are going to use the “positive” or “negative” aspect of words (from the <em>sentiments</em> dataset within the <em>tidytext</em> package) to see if it correlates with the ratings. In order to do that, we need to start by establishing lexicons of words with a positive/negative score.</p>
+<pre class="r"><code># Loading the first sentiment score lexicon
+AFINN &lt;- sentiments %&gt;%
   filter(lexicon == &quot;AFINN&quot;) %&gt;%
   select(word, afinn_score = score)
-head(AFINN)</code></pre>
-<p>We then “tidy up” our dataset by making it “tall” (one word per row).</p>
-<pre class="r"><code># &quot;tidying&quot; up the data (1 word per row)
+head(AFINN)
+
+# Loading the second sentiment score lexicon
+Bing &lt;- sentiments %&gt;%
+  filter(lexicon == &quot;bing&quot;) %&gt;%
+  select(word, bing_sentiment = sentiment)
+head(Bing)</code></pre>
+<p>We then “tidy up” our dataset by making it “tall” (one word per row) and add the sentiment scores for each word</p>
+<pre class="r"><code># &quot;tidying&quot; up the data (1 word per row) and adding the sentiment scores for each word
 review_words &lt;- data %&gt;%
-  unnest_tokens(word, review)</code></pre>
+  unnest_tokens(word, review) %&gt;%
+  select(-c(book,review_length)) %&gt;%
+  left_join(AFINN, by = &quot;word&quot;) %&gt;%
+  left_join(Bing, by = &quot;word&quot;)</code></pre>
 <p>Our data now looks like this:</p>
 <table>
 <thead>
 <tr class="header">
-<th align="left">book</th>
 <th align="left">rating</th>
 <th align="left">review_id</th>
 <th align="left">word</th>
+<th align="left">afinn_score</th>
+<th align="left">bing_sentiment</th>
 </tr>
 </thead>
 <tbody>
 <tr class="odd">
-<td align="left">Eleanor &amp; Park</td>
 <td align="left">5</td>
 <td align="left">1</td>
-<td align="left">experienced</td>
+<td align="left">love</td>
+<td align="left">3</td>
+<td align="left">positive</td>
 </tr>
 <tr class="even">
-<td align="left">It ends with us</td>
-<td align="left">3</td>
+<td align="left">5</td>
 <td align="left">3381</td>
-<td align="left">skipped</td>
+<td align="left">if</td>
+<td align="left">NA</td>
+<td align="left">NA</td>
 </tr>
 <tr class="odd">
-<td align="left">Me Before You</td>
 <td align="left">1</td>
 <td align="left">8090</td>
-<td align="left">hated</td>
+<td align="left">hell</td>
+<td align="left">-4</td>
+<td align="left">negative</td>
 </tr>
 </tbody>
 </table>
-<p>We can assign a positivity/negativity “score” to each review by looking up in the lexicon the score of all the words in a review and calculating the average score for the review.</p>
-<pre class="r"><code>review_mean_sentiment &lt;- review_words %&gt;%
-  inner_join(AFINN, by = &quot;word&quot;) %&gt;%
+<p>We can assign a positivity/negativity “score” to each review by calculating the average score of all the words the review (using the AFINN lexicon; using the Bing lexicon would yield a similar result).</p>
+<pre class="r"><code># Grouping by mean for observation 
+review_mean_sentiment &lt;- review_words %&gt;%
   group_by(review_id, rating) %&gt;%
-  summarize(mean_sentiment = mean(afinn_score))</code></pre>
+  summarize(mean_sentiment = mean(afinn_score, na.rm=TRUE))</code></pre>
 <p>The outcome looks like this:</p>
 <table>
 <thead>
 <tr class="header">
 <th align="left">review_id</th>
 <th align="left">rating</th>
-<th align="left">sentiment</th>
+<th align="left">mean_sentiment</th>
 </tr>
 </thead>
 <tbody>
@@ -278,7 +292,7 @@ ggplot(review_mean_sentiment, aes(rating, mean_sentiment, group = rating)) +
 <img src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAmAAAAFmCAMAAAD9BNZiAAAAflBMVEUAAAAAADoAAGYAOjoAOpAAZrYzMzM6AAA6ADo6AGY6OgA6OpA6ZmY6kNtmAABmADpmAGZmOpBmtrZmtv9/f3+QOgCQOjqQOmaQkGaQ2/+2ZgC2Zma2tma225C2///bkDrbtrbb/7bb///l5eX6+vr/tmb/25D//7b//9v///8PT4YvAAAACXBIWXMAAA7DAAAOwwHHb6hkAAAPYElEQVR4nO2di3LbOBJFmWxs5bGWs6s4M+buRLN2KIr//4MrUA9TskiBBLuJJs6tSZXHLuKarWOg0QTArEJIUNnUvwCatwAMiQrAkKgADIkKwJCoAAyJKgSwHwi1agzAGl//HnD9a/9LlGyG+CjZWIkagI3tA2AAJuoDYAAm6gNgACbqA2AAJuoDYAAm6gNgACbqA2AAJuoDYAAm6gNgACbqA2AAJuozL8Du7+/DfABsbJ9ZAXZ/P4QwAJP0ATAAE/UBMAAT9ZkVYORgsjYAxixS1AbAAEzUBsAATNQGwABM1AbAAEzUBsAATNQGwABM1AbAAEzUBsAATNQGwOYAWOjTLl/NCzClqM3gUdGg56nJA6YUtTk87AawiKMGYD0EYGkCRg4Wc9RmkIOZmQ/FZWMlagA2tg+AAZioz7wAY4gUtUkesEiS/N9heg28PkkbHZ8asKAW6MHG9qEHY4gU9QEwABP1ATAAE/WZFWDMImVtIgaMSr6/AIxnkZ0CMH0bAOshAAOwTgGYvg2A9RCAAVinAEzfBsB6CMAArFMApm8DYD0EYNECRqFV1gbAqgF8AZioz7weFQGYqE3EgGlFDcAkbQAMwLwVnK5GZQNgPWRk6VxMNhWA9RCAKX3yAOYtAAMwf5GDAVinbAA2t1kkgHkLwACsUwA2gQ2A+QvAkgSsXGafXvIHj/YAbAIb84AVH57Xn17KpQdhNgDTmt4BmBdg26eHagdYtf7462Z7JgBTK1CFfiKCPjEBVi5XNWAFgPU16n9JioAde7B89++ozSLLVm9fnn4CYGdG/S9JEbBDDrY+ElXtO7Xdd/c/vbvSxmXbvppXDgZg/rPILDvwVKvYdVnbpz1wZ7NLADvz6X9JmoBdlevFdtr+bIBnAzCGyLgAcznYFa33iVf5+PXQue16uezHqwHVgKkYaZjo+YTadM0ir/B1mFNuPj9X5ffj/JIe7Myo/yUp9mBX6xPrZkpWPh7/B8DOjPpfkiJgdYrv1ODsvOgKYC1G/S9JEbArcuPiQa5723wzVQdjFhk9YHndo63qEsW62bXZAExtR6yOjX3AXLH+rA7WKhuA0YPFBViRuTpFs5LfKhOAkYPFBdixDrZuPItsE4CdGfW/JEXAjnUwVlP0Nup/SYqA0YMN9AEwcjBRHwBLdBYJYLEB5i8TgFGmSBcwI6GKy8ZK1NoBc4ul94nYLQHYBDZWotYK2H4xfrm8u/zBewHYBDZWohZDHcxIqOKysRK1m3UwAIvTxkrUWofIfQVss1DY2W0kVHHZWIlaDHUwI6GKy8ZK1ChTjO0DYAAm6gNgfoC5c3XWjfMBOgRgE9hYiVpXHWyzuKty6mBx2liJWlcdrNhNJKmDRWpjJWpdgOU7uKiDRWpjJWrtQ+RduXQnHDJExmljJWodSX724Xn75MEXgE1hYyVqlCnG9rEC2P24avMBsLF9gm3kPvlzmwG/Z7sAzBBgAxpoF4ABGIDdEICNapMGYMfDmSi0qtukBRiFVnWbFADLs5N8Fhz+DtN94PUzsxn5k5/Y5lYP5qNUejCx8kF6PVg/JQPYgAZalTxg26d3Z7S2CcAGKHnAcg+yLtq4bNtXAJYgYF4virxo47JtXwFYkoB5nNt00cZl274CsAQB81uoc97GZdu+ArAEAavXS3sKwAYodcCuvemjTQA2QB2AidXbWA/mLQAb8skDmLdmDdiYNtEOkfUg+ekl5wC6sAZalTxg+3d2e5XDpgZMqbMHME8bzzLFQ31GvoXlOkqh4mG3p413odUBZmHBIYB53k5MgB17sFzhTR9mADNoEy1ghxxM5U0fAJYiYPtSq4kTDgHM0ycuwPwFYPHazBsw81kxgA2x8QPs+DAyZBZp/hOZ2e3EBNj2yefwzPM2Ltu2/4nM7HZiAmyUBYfmP5GZ3U5MgB3f9OEjAIvXJlrAqs1n742RkwNmcTIBYAs7Sf7MABO7nZjWg42yJt/8n/wktzOkAT9NsciJJH8in9QBI8m/4qMypgz6Pf0UE2CmkvwxbYK7ltBPRNAnJsBG2VUEYJ5KELBr2j6dcGt8mc6zyAHXewrAauVv78bKm6/JArDW6z0FYE7uTLrNl18XX1YMkR3Xeyo1wMrlw5UczBF1OPiw8WUFYB3Xeyo1wK7rKmCOwR+vLRoXsDaXcW06fPwUen1kPqE2PY4xpwfrf72nEuzBrhxjHi9gSpOJAb+np5ID7Oox5tEm+UMa8BSASfdgTfUvUwz45VoFYME+MQF2TbuZpRsw3YEohy/P27hsG8AEbcwDNsYx5gAmZ2MesDGOMQcwORvrgI1yjDmAydnYB8zOgsMhDXgKwOQWHNpZMj2kAU8BmFgONsYx5gAmZ2MdsHEWHMZUYQewqADro6lP15GzATAAE7UBMEHAOMZ8mA+AeSb5do4xl7MBMMEyhZ1jzOVsAEy00GrlGHM5GwAT78EsHGMuZwNg0jmYiWPM5WwATHYWaeQYczkbAKMOJmoDYAAmagNgcoC5Ctg6y3zOmgawCWysRK19Reunl82iubWjXQA2gY2VqHXVwdyKHepgkdpYiVoXYG5ZPpX8SG2sRK19iLwrl+5ZJENknDZWotb1rqIPz34LpwGsqVcdGytRo0wxtg+AAZioD4ABmKgPgAGYqA+AAZioD4ABmKgPgI2/6eN3mO4Dr4/L5lXHxkrU2PQxtg89WKKbPi72hov5KAE25HZiAmx2mz7enT4g5KME2KDbmeLPMplNHwA2TdSS2fShBZjSSGwfsLlt+lACTJFj64D5C8DUbQCsjwAsQcBOB9Blt7MwAFO3sQ9YVdQvkSmy1e1aK4Cp29gH7LiW1c0kb1UqQgEbMLEHMOuAHY8xLz7+ullrNQGYYv1AycY2YK7Q6uR6sHkApvUMh0Jrzxzs9sYPANO3sQ/Yfh6567xuv7QIwPRtZgCYvwBM3wbAegjAUgTsWGlVWK4DYNGuBxMELN9NH++qzUJhNQWAxRu14KpL1/siC7eiVX49mM7f4szqYGai1lVo3Xz5Vf+7pTDAzGQTMdnYiVpXobV8fAawOG3sRK01B3P1+/xBYYg0E6qYbOxErb1Mkd+5maTPq+FNAKaUHGkBZj4H6yMbgOlM79QAs7IG5dbDbh8B2JsArPID7Lhcx0c2yhR6JXYNG/uFVp8dtxdtXLbtKwqt0fb7kj3YCC+F99SsANOr59oGrI8A7E2UKaroAJtVDgZglS9gWi+FZxYZcdQkk/z354NtFqdNku7LU40fwBqa1yxS/nSdxo6P+vVFh8MqiuY6fRuA6WXfGjbmAbtyPphbvbN92ndhZ0OnCcB4FhnXENlyPtih/rr9eTx1x1UyfryGqL6HoBYStLFzOz3PBzssrigfvzZOdqIHU7exE7V+54MdM7LN5+eq/H4cPG2UKcjBosrBLrTOsl1av27y5pYjnrdx2bav5lRondua/ODb6VNoPT9DAMAmtbEStfZZ5LsDA9y4eJCbW26+jVMHMxOquGysRK1929q7DCw/HEfnShTr5lNwAJvAxkrUuobIwgGl8EplI6GKy8ZK1G7kYNsnluvEaWMlavRgY/sAmGcl3/eUfACbxMZK1HrMIlsFYBPYWInarTrY9g/xHMxKTToqGzNR6wZsrbAm38xTtZhs7EStA7BC511FZkIVk42dqHXvKvLbfAtg6jZ2onYdsLyuT3i9T7kiB5vCxkzUrgJ2WFaoBJiV+VBcNlaidr0HKzR7MCuhisvGStQ6H3ar5GBmQhWXjZWodcwiXZ6v8sZbI6GKy8ZK1LrrYAVnU8RqYyVqN1e0/gfAorSxfox5HwHYBDbWD6DrIwCbwAbA/AVg0UYNwGRtkgeMHEzWBsAATNQmecAYImVtAAzARG0ADMBEbZIHjBxM1gbAAEzUJnnAGCJlbQAMwERtACwOwH6H6TXw+iRtlHx2fIU1QA82ts+sejDdEw7bBGAT2FiJGoCN7QNgACbqA2AAJumjtfGWQqu/5gSY1tEBaZUpWtr2FYBFGzUAk7UBMAATtSEHIwcTtWEWySxS1AbAAEzUBsAATNQGwABM1AbAAEzUBsAATNQGwABM1AbAAEzUBsAATNQGwABM1AbAAEzUBsAATNQGwABM1AbAAEzUBsAATNQGwABM1AbAAEzUBsAATNQGwABM1AbAAEzUBsAATNQGwABM1AbAVAHbLLLs00v95fap8SJJAJvAxkrU+gBW3J2+zO/cfxdtXLbtqYi3QgOYKmD56RXe5eNztfly7MLCABu0Ox3AZgjY9ufpBd4OLgfZ7rqdfryGqAYsqAUUsXoAVj5+Pb4k/g2wJqSX8PqJHowebK/N5+eq/F6Pi2MCRg4GYFW1zrI6pz9QNSpgVkIVl42VqPWsgx2oGjPJNxOquGysRK0HYMXHX9Xm274ONmaZwkqo4rKxErU+PdhunHTVVVetKJcUWqe1sRI1HhWN7QNgACbqA2AAJuoDYAAm6gNgACbqA2AAJuoDYAAm6gNg4wMWqCy0gRRtzNzOCICFSsl7XjbWbgfAjNlYux0AM2Zj7XamBAwlIABDogIwJCoAQ6ICMCSqCQF7W3stabLIspW8TZEdN15JSy1qh738oZoOsHL5UT5U5XJVFfIfvdt4VSjczk65hk1jL3+oJgNsnf1T4W+x2P0dbp8UurCqsdtKUsU/NHqwt738wZoMsL9fVDr7at+LKWg90pjSqe0ffylErbGXP1hzz8EqpU9+s1DJwdYPGlFr7OUP1vwBW+vkRio5WPkvlX6/sZc/WLMHbK00u1PJwfKVWr8/1u3MHTCt/ksFsHLpDjXSKLsAmK/HZ5X+q7n5XVgaURvzdmYOWK70J3/Y/K4gnX5/vNvhURESFYAhUQEYEhWAIVEBGBIVgCFRARgSFYCNoGKltWTDngAsXMDVIQALF4B1CMCGqHz80z1LyevHUPUC9v8t3TD57+X+udTuBx/+1FrGEbcAbIjKpVvE6A50d6uByuXq8G/3P+4bbt18obULJHIB2BCVy4fDgpbNYtUA7KH+hvveDj8AcwKwITplXYUbEt8AW9U/2q9tVdjMZEEANkR7wNyilr8W7wFbA9ibAGyIapTqkXBzBTB6sIYAbIhqlGqOiitD5D4HU9sMELcAbIhOPVi5zB7q5L4JGLPIhgBsiE452IdnN1nMj3WwA2CuDvbxv2rbTaIWgElJ6ayK2AVg46vOweqiGAIwCRVquxfjF4AhUQEYEhWAIVEBGBIVgCFRARgSFYAhUQEYEtX/AQtjruBm7tEIAAAAAElFTkSuQmCC" alt />
 
 </div>
-<p>We’re onto something! Visually at least, we can see a difference across ratings, with the sentiment score for 1-star reviews being squarely negative and the sentiment score for 5-star reviews being squarely positive. Let’s create a new dataset to integrate this feature for future use (note that in the process we lose a few observations, reviews that are too short to get an AFINN score).</p>
+<p>We’re onto something! Visually at least, we can see a difference across ratings, with the sentiment score for 1-star reviews being squarely negative and the sentiment score for 5-star reviews being squarely positive. Let’s create a new dataset to integrate this feature for future use (note that some reviews are too short or use no word recorded in our lexicons, so they don’t have a score).</p>
 <pre class="r"><code>review_mean_sentiment &lt;- review_mean_sentiment %&gt;%
   select(-rating) %&gt;% # We remove the rating here to avoid duplicating it
   data.table()
@@ -286,9 +300,8 @@ clean_data &lt;- data %&gt;%
   left_join(review_mean_sentiment, by = &quot;review_id&quot;)</code></pre>
 <p>The difference between ratings is even clearer if we take the median score instead of the mean:</p>
 <pre class="r"><code>review_median_sentiment &lt;- review_words %&gt;%
-  inner_join(AFINN, by = &quot;word&quot;) %&gt;%
   group_by(review_id, rating) %&gt;%
-  summarize(median_sentiment = median(afinn_score))
+  summarize(median_sentiment = median(afinn_score, na.rm = TRUE))
 theme_set(theme_bw())
 ggplot(review_median_sentiment, aes(rating, median_sentiment, group = rating)) +
   geom_boxplot() +

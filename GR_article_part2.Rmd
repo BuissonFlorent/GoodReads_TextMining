@@ -63,7 +63,7 @@ data$rating[data$rating=='it was amazing']=5
 data$rating=as.integer(data$rating)
 
 data$language=NULL
-data$author=NULL
+data$reviewer=NULL
 data$review_id=1:nrow(data)
 ```
 
@@ -111,47 +111,57 @@ Visually, more positive reviews appear to be slightly shorter than more negative
 
 # Sentiment analysis
 
-In this section, we are going to use the "positive" or "negative" aspect of words (from the *sentiments* dataset within the *tidytext* package) to see if it correlates with the ratings. In order to do that, we need to start by establishing a lexicon of words with a positive/negative score. 
+In this section, we are going to use the "positive" or "negative" aspect of words (from the *sentiments* dataset within the *tidytext* package) to see if it correlates with the ratings. In order to do that, we need to start by establishing lexicons of words with a positive/negative score. 
 
 ```{r, eval=FALSE}
+# Loading the first sentiment score lexicon
 AFINN <- sentiments %>%
   filter(lexicon == "AFINN") %>%
   select(word, afinn_score = score)
 head(AFINN)
+
+# Loading the second sentiment score lexicon
+Bing <- sentiments %>%
+  filter(lexicon == "bing") %>%
+  select(word, bing_sentiment = sentiment)
+head(Bing)
 ```
 
-We then "tidy up" our dataset by making it "tall" (one word per row).
+We then "tidy up" our dataset by making it "tall" (one word per row) and add the sentiment scores for each word
 
 ```{r, eval=FALSE}
-# "tidying" up the data (1 word per row)
+# "tidying" up the data (1 word per row) and adding the sentiment scores for each word
 review_words <- data %>%
-  unnest_tokens(word, review)
+  unnest_tokens(word, review) %>%
+  select(-c(book,review_length)) %>%
+  left_join(AFINN, by = "word") %>%
+  left_join(Bing, by = "word")
 ```
 
 Our data now looks like this:
 
-book            | rating | review_id | word         |
-----------------|--------|-----------|--------------|
-Eleanor & Park  | 5      | 1         | experienced  |
-It ends with us | 3      | 3381      | skipped      |
-Me Before You   | 1      | 8090      | hated        |
+rating | review\_id   | word         | afinn\_score  | bing\_sentiment
+-------|--------------|--------------|---------------|-----------------
+ 5     | 1            | love         | 3             | positive
+ 5     | 3381         | if           | NA            | NA
+ 1     | 8090         | hell         | -4            | negative
 
-We can assign a positivity/negativity "score" to each review by looking up in the lexicon the score of all the words in a review and calculating the average score for the review.
+We can assign a positivity/negativity "score" to each review by calculating the average score of all the words the review (using the AFINN lexicon; using the Bing lexicon would yield a similar result).
 
 ```{r, eval=FALSE}
+# Grouping by mean for observation 
 review_mean_sentiment <- review_words %>%
-  inner_join(AFINN, by = "word") %>%
   group_by(review_id, rating) %>%
-  summarize(mean_sentiment = mean(afinn_score))
+  summarize(mean_sentiment = mean(afinn_score, na.rm=TRUE))
 ```
 
 The outcome looks like this:
 
-review_id | rating | sentiment |
-----------|--------|-----------|
- 1        | 5      | 0.9444    |
- 2        | 3      | -0.093    |
- 3        | 5      | -1.17     |
+review\_id  | rating | mean\_sentiment  |
+------------|--------|------------------|
+ 1          | 5      | 0.9444           |
+ 2          | 3      | -0.093           |
+ 3          | 5      | -1.17            |
 
 So, how does the average sentiment score vary by rating?
 
@@ -164,7 +174,7 @@ ggplot(review_mean_sentiment, aes(rating, mean_sentiment, group = rating)) +
 
 ![](Boxplot_mean_sentiment.png)
 
-We're onto something! Visually at least, we can see a difference across ratings, with the sentiment score for 1-star reviews being squarely negative and the sentiment score for 5-star reviews being squarely positive. Let's create a new dataset to integrate this feature for future use (note that in the process we lose a few observations, reviews that are too short to get an AFINN score).
+We're onto something! Visually at least, we can see a difference across ratings, with the sentiment score for 1-star reviews being squarely negative and the sentiment score for 5-star reviews being squarely positive. Let's create a new dataset to integrate this feature for future use (note that some reviews are too short or use no word recorded in our lexicons, so they don't have a score).
 
 ```{r, eval = FALSE}
 review_mean_sentiment <- review_mean_sentiment %>%
@@ -178,9 +188,8 @@ The difference between ratings is even clearer if we take the median score inste
 
 ```{r, eval=FALSE}
 review_median_sentiment <- review_words %>%
-  inner_join(AFINN, by = "word") %>%
   group_by(review_id, rating) %>%
-  summarize(median_sentiment = median(afinn_score))
+  summarize(median_sentiment = median(afinn_score, na.rm = TRUE))
 theme_set(theme_bw())
 ggplot(review_median_sentiment, aes(rating, median_sentiment, group = rating)) +
   geom_boxplot() +
@@ -197,6 +206,58 @@ review_median_sentiment <- review_median_sentiment %>%
   data.table()
 clean_data <- clean_data %>%
   left_join(review_median_sentiment, by = "review_id")
+```
+
+Last but not least, we are going to count the number of negative and positive words in each review, according to the two lexicons, for use in the machine learning algorithm.
+
+```{r, eval = FALSE}
+# Counting the number of negative words per review according to AFINN lexicon
+review_count_afinn_negative <- review_words %>%
+  filter(afinn_score < 0) %>%
+  group_by(review_id, rating) %>%
+  summarize(count_afinn_negative = n())
+# Transferring the results to our dataset
+review_count_afinn_negative <- review_count_afinn_negative %>%
+  select(-rating) %>%
+  data.table()
+clean_data <- clean_data %>%
+  left_join(review_count_afinn_negative, by = "review_id")
+
+# Counting the number of positive words per review according to AFINN lexicon
+review_count_afinn_positive <- review_words %>%
+  filter(afinn_score > 0) %>%
+  group_by(review_id, rating) %>%
+  summarize(count_afinn_positive = n())
+# Transferring the results to our dataset
+review_count_afinn_positive <- review_count_afinn_positive %>%
+  select(-rating) %>%
+  data.table()
+clean_data <- clean_data %>%
+  left_join(review_count_afinn_positive, by = "review_id")
+
+# Counting the number of negative words per review according to Bing lexicon
+review_count_bing_negative <- review_words %>%
+  filter(bing_sentiment == "negative") %>%
+  group_by(review_id, rating) %>%
+  summarize(count_bing_negative = n())
+# Transferring the results to our dataset
+review_count_bing_negative <- review_count_bing_negative %>%
+  select(-rating) %>%
+  data.table()
+clean_data <- clean_data %>%
+  left_join(review_count_bing_negative, by = "review_id")
+
+# Counting the number of positive words per review according to Bing lexicon
+review_count_bing_positive <- review_words %>%
+  filter(bing_sentiment == "positive") %>%
+  group_by(review_id, rating) %>%
+  summarize(count_bing_positive = n())
+# Transferring the results to our dataset
+review_count_bing_positive <- review_count_bing_positive %>%
+  select(-rating) %>%
+  data.table()
+clean_data <- clean_data %>%
+  left_join(review_count_bing_positive, by = "review_id")
 ```
 
 Finally, we save our data to a file for future use.

@@ -35,7 +35,7 @@ data$rating=as.integer(data$rating)
 
 # Removing the language and author variables and adding a review_id column
 data$language=NULL
-data$author=NULL
+data$reviewer=NULL
 data$review_id=1:nrow(data)
 
 ### Exploratory data analysis ### 
@@ -57,28 +57,35 @@ with(data, boxplot(review_length~rating, main = "Distribution of review length b
 
 ### Sentiment analysis with tidytext ###
 
-# Loading the sentiment analysis lexicon
+# Loading the first sentiment score lexicon
 AFINN <- sentiments %>%
   filter(lexicon == "AFINN") %>%
   select(word, afinn_score = score)
 head(AFINN)
 
-# "tidying" up the data (1 word per row)
+# Loading the second sentiment score lexicon
+Bing <- sentiments %>%
+  filter(lexicon == "bing") %>%
+  select(word, bing_sentiment = sentiment)
+head(Bing)
+
+
+# "tidying" up the data (1 word per row) and adding the sentiment scores for each word
 review_words <- data %>%
-  unnest_tokens(word, review)
+  unnest_tokens(word, review) %>%
+  select(-c(book,review_length)) %>%
+  left_join(AFINN, by = "word") %>%
+  left_join(Bing, by = "word")
 
-# "lookup" the words in the sentiment lexicon and grouping by mean for observation 
+# Grouping by mean for observation 
 review_mean_sentiment <- review_words %>%
-  inner_join(AFINN, by = "word") %>%
   group_by(review_id, rating) %>%
-  summarize(mean_sentiment = mean(afinn_score))
-
+  summarize(mean_sentiment = mean(afinn_score, na.rm=TRUE))
 # Plotting the result
 theme_set(theme_bw())
 ggplot(review_mean_sentiment, aes(rating, mean_sentiment, group = rating)) +
   geom_boxplot() +
   ylab("Average sentiment score")
-
 # Transferring the results to our dataset
 review_mean_sentiment <- review_mean_sentiment %>%
   select(-rating) %>%
@@ -89,9 +96,8 @@ clean_data <- data %>%
 
 # Same as previous, but with the median
 review_median_sentiment <- review_words %>%
-  inner_join(AFINN, by = "word") %>%
   group_by(review_id, rating) %>%
-  summarize(median_sentiment = median(afinn_score))
+  summarize(median_sentiment = median(afinn_score, na.rm = TRUE))
 theme_set(theme_bw())
 ggplot(review_median_sentiment, aes(rating, median_sentiment, group = rating)) +
   geom_boxplot() +
@@ -102,6 +108,55 @@ review_median_sentiment <- review_median_sentiment %>%
   data.table()
 clean_data <- clean_data %>%
   left_join(review_median_sentiment, by = "review_id")
+
+
+# Counting the number of negative words per review according to AFINN lexicon
+review_count_afinn_negative <- review_words %>%
+  filter(afinn_score < 0) %>%
+  group_by(review_id, rating) %>%
+  summarize(count_afinn_negative = n())
+# Transferring the results to our dataset
+review_count_afinn_negative <- review_count_afinn_negative %>%
+  select(-rating) %>%
+  data.table()
+clean_data <- clean_data %>%
+  left_join(review_count_afinn_negative, by = "review_id")
+
+# Counting the number of positive words per review according to AFINN lexicon
+review_count_afinn_positive <- review_words %>%
+  filter(afinn_score > 0) %>%
+  group_by(review_id, rating) %>%
+  summarize(count_afinn_positive = n())
+# Transferring the results to our dataset
+review_count_afinn_positive <- review_count_afinn_positive %>%
+  select(-rating) %>%
+  data.table()
+clean_data <- clean_data %>%
+  left_join(review_count_afinn_positive, by = "review_id")
+
+# Counting the number of negative words per review according to Bing lexicon
+review_count_bing_negative <- review_words %>%
+  filter(bing_sentiment == "negative") %>%
+  group_by(review_id, rating) %>%
+  summarize(count_bing_negative = n())
+# Transferring the results to our dataset
+review_count_bing_negative <- review_count_bing_negative %>%
+  select(-rating) %>%
+  data.table()
+clean_data <- clean_data %>%
+  left_join(review_count_bing_negative, by = "review_id")
+
+# Counting the number of positive words per review according to Bing lexicon
+review_count_bing_positive <- review_words %>%
+  filter(bing_sentiment == "positive") %>%
+  group_by(review_id, rating) %>%
+  summarize(count_bing_positive = n())
+# Transferring the results to our dataset
+review_count_bing_positive <- review_count_bing_positive %>%
+  select(-rating) %>%
+  data.table()
+clean_data <- clean_data %>%
+  left_join(review_count_bing_positive, by = "review_id")
 
 # Writing the data to file for future analyses
 write.csv(clean_data, "GoodReadsCleanData.csv", row.names = FALSE)
