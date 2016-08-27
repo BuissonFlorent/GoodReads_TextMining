@@ -1,0 +1,129 @@
+---
+title: "GoodReads: Webscraping and Text Analysis with R: Part 3"
+author: "Florent Buisson"
+date: "August 22, 2016"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_chunk$set(eval = FALSE)
+```
+
+## Introduction
+
+In the first installment of this series, we scraped reviews from Goodreads. In the second one, we performed exploratory data analysis and created new variables. We are now ready for the "main dish": machine learning!
+
+## Setup and general data prep
+
+Let's start by loading the libraries and our dataset.
+
+```{r}
+setwd("C:/Users/Florent/Desktop/Data_analysis_applications/GoodReads_TextMining")
+data=read.csv("GoodReadsCleanData.csv", stringsAsFactors = FALSE)
+```
+
+To recap, at this point, we have the following features in our dataset:
+
+* review\_id 
+* book 
+* rating 
+* review 
+* review\_length 
+* mean\_sentiment 
+* median\_sentiment 
+* count\_afinn\_positive 
+* count\_afinn\_negative 
+* count\_bing\_negative 
+* count\_bing\_positive
+
+For this example, we'll simplify the analysis by collapsing the 1 to 5 stars rating into a binary variable: whether the book was rated a "good read" (4 or 5 stars) or not (1 to 3 stars). This will allow us to use classification algorithms, and to have less unbalanced categories. 
+
+```{r}
+set.seed(1234)
+# Creating the outcome value
+data$good_read=0
+data$good_read[data$rating==4|data$rating==5]=1
+```
+
+The "good reads", or positive reviews, represent about 85% of the dataset, and the "bad reads", or negative reviews, with `good_read==0`, about 15%. We then create the train and test subsets. The dataset is still fairly unbalanced, so we don't just randomly assign data points to the train and test datasets; we make sure to preserve the percentage of good reads in each subset by using the caret function `createDataPartition` for stratified sampling.
+
+```{r}
+trainIdx <- createDataPartition(data$good_read, p = .75,list = FALSE,times = 1)
+train=data[trainIdx,]
+test=data[-trainIdx,]
+```
+
+## Creating the Document-Term Matrices (DTM)
+
+Our goal is to use the frequency of individual words in the reviews as features in our machine learning algorithms. In order to do that, we need to start by counting the number of occurrence of each word in each review. Fortunately, there are tools to do just that, that will return a convenient "Document-Term Matrix", with the reviews in rows and the words in columns; each entry in the matrix indicates the number of occurrences of that particular word in that particular review.
+
+We don't want to catch every single word that appears in at least one review, because very rare words will increase the size of the DTM while having little predictive power. So we'll only keep in our DTM words that appear in at least a certain percentage of all reviews, say 5%. This is controlled by the `sparsity` parameter in the following code, with `sparsity = 1-0.05 = 0.95`.
+
+There is a challenge though. The premise of our analysis is that some words appear in negative reviews and not in positive reviews, and reversely (or at least with a different frequency). But if we only keep words that appear in 5% of our overall training dataset, because negative reviews represent only 15% of our dataset, we are effectively requiring that a negative word appears in `5%/15% = 33%` of the negative reviews; this is a much too high threshold and won't do. 
+
+The solution is to create two different DTM for our training dataset, one for positive reviews and one for negative reviews, and then to merge them together. This way, the effective threshold for negative words is to appear in only 5% of the negative reviews.
+
+```{r}
+# Creating a DTM for the negative reviews
+bad_sparsity=.95
+bad_dtm = create_matrix(train$review[train$good_read==0], language="english", removeStopwords=FALSE, removeNumbers=TRUE, stemWords=FALSE, removeSparseTerms = bad_sparsity) 
+#Converting the DTM in a data frame
+bad_dtm_df = as.data.frame(as.matrix(bad_dtm), row.names = train$review_id[train$good_read==0])
+
+# Creating a DTM for the positive reviews
+good_sparsity=.95
+good_dtm = create_matrix(train$review[train$good_read==1], language="english", removeStopwords=FALSE, removeNumbers=TRUE, stemWords=FALSE, removeSparseTerms = good_sparsity) 
+good_dtm_df = data.table(as.matrix(good_dtm), row.names = train$review_id[train$good_read==1])
+
+# Joining the two DTM together
+train_dtm_df = bind_rows(bad_dtm_df,good_dtm_df)
+train_dtm_df$review_id = c(train$review_id[train$good_read==0],train$review_id[train$good_read==1])
+train_dtm_df = arrange(train_dtm_df, review_id)
+train_dtm_df$good_read=train$good_read
+```
+
+We also want to use in our analyses our aggregate variables (review length, mean and median sentiment, count of positive and negative words according to the two lexicons), so we join the DTM to the train dataset, by review id. We also convert all NA values in our data frames to 0 (these NA have been generated where words were absent of reviews, so that's the correct of dealing with them here; but kids, don't convert NA to 0 at home without thinking about it first).
+
+```{r}
+train_dtm_df = train %>%
+  select(-c(book,rating,review,good_read)) %>%
+  inner_join(train_dtm_df, by = "review_id") %>%
+  select(-review_id)
+
+train_dtm_df[is.na(train_dtm_df)] = 0
+```
+
+We repeat the process for the test dataset. Obviously, here we cannot create separate DTM for the good and bad reviews, because it's what we are trying to predict! To avoid missing words that appear only in some negative reviews (as these might be the words with the highest predictive power), we'll lower our selection threshold from 5% to 1%. This will yield a much bigger DTM, but that will be taken care of in the next step. 
+
+```{r}
+# Creating the test DTM
+test_sparsity=0.99
+test_dtm = create_matrix(test$review, language="english", removeStopwords=FALSE, removeNumbers=TRUE, stemWords=FALSE, removeSparseTerms = test_sparsity) 
+test_dtm_df=data.table(as.matrix(test_dtm))
+test_dtm_df$review_id=test$review_id
+test_dtm_df$good_read=test$good_read
+
+test_dtm_df = test %>%
+  select(-c(book,rating,review,good_read)) %>%
+  inner_join(test_dtm_df, by = "review_id") %>%
+  select(-review_id)
+```
+
+A challenge here is to ensure that the test DTM has the same columns as the train dataset. Obviously, some words may appear in the test dataset while being absent of the train dataset, but there's nothing we can do about them as our algorithms won't have anything to say about them. The trick we're going to use relies on the flexibility of the data.tables: when you join by rows two data.tables with different columns, the resulting data.table automatically has all the columns of the two initial data.tables, with the missing values set as NA. So we are going to add a row of our training data.table to our test data.table and immediately remove it after the missing columns will have been created; then we'll keep only the columns which appear in the training dataset (i.e. discard all columns which appear only in the test dataset).
+
+```{r}
+test_dtm_df = head(bind_rows(test_dtm_df, train_dtm_df[1,]),-1)
+test_dtm_df = test_dtm_df %>% 
+  select(one_of(colnames(train_dtm_df)))
+test_dtm_df[is.na(test_dtm_df)] = 0
+```
+
+With this, we have our training and test datasets and we can start crunching numbers!
+
+## Machine learning
+
+
+
+
+
