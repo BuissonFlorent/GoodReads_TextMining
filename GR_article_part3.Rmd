@@ -19,6 +19,13 @@ In the first installment of this series, we scraped reviews from Goodreads. In t
 Let's start by loading the libraries and our dataset.
 
 ```{r}
+library(data.table)
+library(dplyr)
+library(caret)
+library(RTextTools)
+library(xgboost)
+library(ROCR)
+
 setwd("C:/Users/Florent/Desktop/Data_analysis_applications/GoodReads_TextMining")
 data=read.csv("GoodReadsCleanData.csv", stringsAsFactors = FALSE)
 ```
@@ -58,22 +65,21 @@ test=data[-trainIdx,]
 
 Our goal is to use the frequency of individual words in the reviews as features in our machine learning algorithms. In order to do that, we need to start by counting the number of occurrence of each word in each review. Fortunately, there are tools to do just that, that will return a convenient "Document-Term Matrix", with the reviews in rows and the words in columns; each entry in the matrix indicates the number of occurrences of that particular word in that particular review.
 
-We don't want to catch every single word that appears in at least one review, because very rare words will increase the size of the DTM while having little predictive power. So we'll only keep in our DTM words that appear in at least a certain percentage of all reviews, say 5%. This is controlled by the `sparsity` parameter in the following code, with `sparsity = 1-0.05 = 0.95`.
+We don't want to catch every single word that appears in at least one review, because very rare words will increase the size of the DTM while having little predictive power. So we'll only keep in our DTM words that appear in at least a certain percentage of all reviews, say 1%. This is controlled by the `sparsity` parameter in the following code, with `sparsity = 1-0.01 = 0.99`.
 
-There is a challenge though. The premise of our analysis is that some words appear in negative reviews and not in positive reviews, and reversely (or at least with a different frequency). But if we only keep words that appear in 5% of our overall training dataset, because negative reviews represent only 15% of our dataset, we are effectively requiring that a negative word appears in `5%/15% = 33%` of the negative reviews; this is a much too high threshold and won't do. 
+There is a challenge though. The premise of our analysis is that some words appear in negative reviews and not in positive reviews, and reversely (or at least with a different frequency). But if we only keep words that appear in 1% of our overall training dataset, because negative reviews represent only 15% of our dataset, we are effectively requiring that a negative word appears in `1%/15% = 6.67%` of the negative reviews; this is too high a threshold and won't do. 
 
-The solution is to create two different DTM for our training dataset, one for positive reviews and one for negative reviews, and then to merge them together. This way, the effective threshold for negative words is to appear in only 5% of the negative reviews.
+The solution is to create two different DTM for our training dataset, one for positive reviews and one for negative reviews, and then to merge them together. This way, the effective threshold for negative words is to appear in only 1% of the negative reviews.
 
 ```{r}
 # Creating a DTM for the negative reviews
-bad_sparsity=.95
-bad_dtm = create_matrix(train$review[train$good_read==0], language="english", removeStopwords=FALSE, removeNumbers=TRUE, stemWords=FALSE, removeSparseTerms = bad_sparsity) 
+sparsity=.99
+bad_dtm = create_matrix(train$review[train$good_read==0], language="english", removeStopwords=FALSE, removeNumbers=TRUE, stemWords=FALSE, removeSparseTerms = sparsity) 
 #Converting the DTM in a data frame
 bad_dtm_df = as.data.frame(as.matrix(bad_dtm), row.names = train$review_id[train$good_read==0])
 
 # Creating a DTM for the positive reviews
-good_sparsity=.95
-good_dtm = create_matrix(train$review[train$good_read==1], language="english", removeStopwords=FALSE, removeNumbers=TRUE, stemWords=FALSE, removeSparseTerms = good_sparsity) 
+good_dtm = create_matrix(train$review[train$good_read==1], language="english", removeStopwords=FALSE, removeNumbers=TRUE, stemWords=FALSE, removeSparseTerms = sparsity) 
 good_dtm_df = data.table(as.matrix(good_dtm), row.names = train$review_id[train$good_read==1])
 
 # Joining the two DTM together
@@ -94,12 +100,11 @@ train_dtm_df = train %>%
 train_dtm_df[is.na(train_dtm_df)] = 0
 ```
 
-We repeat the process for the test dataset. Obviously, here we cannot create separate DTM for the good and bad reviews, because it's what we are trying to predict! To avoid missing words that appear only in some negative reviews (as these might be the words with the highest predictive power), we'll lower our selection threshold from 5% to 1%. This will yield a much bigger DTM, but that will be taken care of in the next step. 
+We repeat the process for the test dataset. Obviously, here we cannot create separate DTM for the good and bad reviews, because it's what we are trying to predict! We'll just have to use the 1% threshold at the level of the whole test dataset. 
 
 ```{r}
 # Creating the test DTM
-test_sparsity=0.99
-test_dtm = create_matrix(test$review, language="english", removeStopwords=FALSE, removeNumbers=TRUE, stemWords=FALSE, removeSparseTerms = test_sparsity) 
+test_dtm = create_matrix(test$review, language="english", removeStopwords=FALSE, removeNumbers=TRUE, stemWords=FALSE, removeSparseTerms = sparsity) 
 test_dtm_df=data.table(as.matrix(test_dtm))
 test_dtm_df$review_id=test$review_id
 test_dtm_df$good_read=test$good_read
@@ -123,7 +128,66 @@ With this, we have our training and test datasets and we can start crunching num
 
 ## Machine learning
 
+We'll be using XGboost here, as it yields the best results (I tried Random Forests and Support Vector Machines too, but the resulting accuracy is too instable with these to be reliable).
+
+We start by calculating our baseline accuracy, what would get by always predicting the most frequent category, and then we calibrate our model.
+
+```{r}
+baseline_acc=sum(test$good_read=="1")/nrow(test)
+
+XGB_train=as.matrix(select(train_dtm_df,-good_read),dimnames=dimnames(train_dtm_df))
+XGB_test=as.matrix(select(test_dtm_df,-good_read),dimnames=dimnames(test_dtm_df))
+XGB_model <- xgboost(data=XGB_train, label=train_dtm_df$good_read,nrounds=400, objective="binary:logistic")
+
+XGB_predict = predict(XGB_model,XGB_test)
+
+XGB_results=data.frame(good_read=test$good_read,pred=XGB_predict)
+```
+
+The XGBoost algorithm yields a probabilist prediction, so we need to determine a threshold over which we'll classify a review as good. In order to do that, we'll plot the ROC (Receiver Operating Characteristic) curve for the true negative rate against the false negative rate. 
+
+```{r}
+ROCR_pred <- prediction(XGB_results$pred,XGB_results$good_read)
+ROCR_perf <- performance(ROCR_pred, 'tnr','fnr') 
+plot(ROCR_perf, colorize = TRUE)
+```
+
+![](ROC_curve.png)
+
+Things are looking pretty good. It seems that by using a threshold of about 0.8 (where the curve becomes red), we can correctly classify more than 50% of the negative reviews (the true negative rate) while misclassifying as negative reviews less than 10% of the positive reviews (the false negative rate).
+
+```{r}
+XGB_table=table(true=XGB_results$good_read, pred=as.integer(XGB_results$pred >=0.80))
+XGB_table
+XGB_acc=sum(diag(XGB_table))/nrow(test)
+```
+
+Our overall accuracy is 87%, so we beat the benchmark of always predicting that a review is positive (which would yield a 83.4% accuracy here, to be precise), while catching 61.5% of the negative reviews. Not bad for a "black box" algorithm, without any parameter optimization or feature engineering!
+
+## Directions for further analyses
+
+If we wanted to go deeper in the analysis, a good starting point would be to look at the relative importance of features in the XGBoost algorithm:
+
+```{r}
+### Feature analysis with XGBoost
+names <- colnames(test_dtm_df)
+importance_matrix <- xgb.importance(names, model = XGB_model)
+xgb.plot.importance(importance_matrix[1:20,])
+```
+
+![](XGBoost_feature_importance.png)
+
+As we can see, there are a few words, such as "colleen" or "you" that are unlikely to be useful in a more general setting, but overall, we find that the most predictive words are negative ones, which was to be expected. We also see that two of our aggregate variables, `review_length` and `count_bing_negative`, made the top 10. 
+
+There are several ways we could improve on the analysis at this point, such as:
+
+* using N-grams (i.e. sequences of words, such as "did not like") in addition to single words, to better qualify negative terms. "was very disappointed" would obviously have a different impact compared to "was not disappointed", even though on a word-by-word basis they could not be distinguished.
+* fine-tuning the parameters of the XGBoost algorithm. 
+* looking at the negative reviews that have been misclassified, in order to determine what features to add to the analysis. 
+
+## Conclusion
+
+We have covered a lot of ground in this series: from webscraping to sentiment analysis to predictive analytics with machine learning. The main conclusion I would draw from this exercise is that we now have at our disposal a large number of powerful tools that can be used "off-the-shelf" to build fairly quickly a complete and meaningful analytical pipeline. 
 
 
-
-
+As for the first two installments, the complete R code for this part is available on [my GitHub](https://github.com/BuissonFlorent/GoodReads_TextMining).
