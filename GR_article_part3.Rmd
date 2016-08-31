@@ -65,6 +65,14 @@ test=data[-trainIdx,]
 
 Our goal is to use the frequency of individual words in the reviews as features in our machine learning algorithms. In order to do that, we need to start by counting the number of occurrence of each word in each review. Fortunately, there are tools to do just that, that will return a convenient "Document-Term Matrix", with the reviews in rows and the words in columns; each entry in the matrix indicates the number of occurrences of that particular word in that particular review.
 
+A typical DTM would look like this:
+
+Reviews  | about | across | ado | adult |
+---------|-------|--------|-----|-------|       
+Review 1 |   0   |   2    |  1  |  0    |
+Review 2 |   1   |   0    |  0  |  1    |
+
+
 We don't want to catch every single word that appears in at least one review, because very rare words will increase the size of the DTM while having little predictive power. So we'll only keep in our DTM words that appear in at least a certain percentage of all reviews, say 1%. This is controlled by the `sparsity` parameter in the following code, with `sparsity = 1-0.01 = 0.99`.
 
 There is a challenge though. The premise of our analysis is that some words appear in negative reviews and not in positive reviews, and reversely (or at least with a different frequency). But if we only keep words that appear in 1% of our overall training dataset, because negative reviews represent only 15% of our dataset, we are effectively requiring that a negative word appears in `1%/15% = 6.67%` of the negative reviews; this is too high a threshold and won't do. 
