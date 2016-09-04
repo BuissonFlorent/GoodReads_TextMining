@@ -142,53 +142,64 @@ library(magrittr)
 library(textcat)
 library(tidytext)
 library(RTextTools)</code></pre>
-<pre class="r"><code>data = read.csv(&quot;GoodReadsData.csv&quot;, stringsAsFactors = FALSE)
-data=data.table(data)</code></pre>
+<pre class="r"><code>data &lt;- read.csv(&quot;GoodReadsData.csv&quot;, stringsAsFactors = FALSE)
+data &lt;- data.table(data)</code></pre>
 <p>After a quick inspection of the data, we realize that some reviews are not in English. We get rid of them.</p>
-<pre class="r"><code>data$language=as.factor(textcat(data$review))
-data=data[language==&quot;english&quot;]</code></pre>
+<pre class="r"><code>data$language &lt;- as.factor(textcat(data$review))
+data &lt;- data[language == &quot;english&quot;]</code></pre>
 <p>The language detection algorithm is not great and reclassifies some reviews in weird languages (6 breton? 9 rumantsch?? 103 middle frisian???), but that’s good enough for what we want to do.</p>
 <p>Then we exclude all ratings that do not correspond to a 1 to 5 star rating (such as “currently reading it”, or an empty rating) and all reviews that are too short.</p>
-<pre class="r"><code>data=data[rating %in% c('did not like it','it was ok','liked it','really liked it','it was amazing')]
-data=data[length(data$review)&gt;=5]</code></pre>
+<pre class="r"><code>data &lt;- data[rating %in% c('did not like it',
+                           'it was ok',
+                           'liked it',
+                           'really liked it',
+                           'it was amazing')]
+data &lt;- data[length(data$review) &gt;= 5]</code></pre>
 <p>Finally, we recode the ratings in numerical format, remove the language and reviewer columns that we won’t be using anymore, and add a review_id column (to be able to identify to which review a word belongs).</p>
-<pre class="r"><code>data$rating[data$rating=='did not like it']=1
-data$rating[data$rating=='it was ok']=2
-data$rating[data$rating=='liked it']=3
-data$rating[data$rating=='really liked it']=4
-data$rating[data$rating=='it was amazing']=5
-data$rating=as.integer(data$rating)
+<pre class="r"><code>data$rating[data$rating == 'did not like it'] &lt;- 1
+data$rating[data$rating == 'it was ok'      ] &lt;- 2
+data$rating[data$rating == 'liked it'       ] &lt;- 3
+data$rating[data$rating == 'really liked it'] &lt;- 4
+data$rating[data$rating == 'it was amazing' ] &lt;- 5
+data$rating &lt;- as.integer(data$rating)
 
-data$language=NULL
-data$reviewer=NULL
-data$review_id=1:nrow(data)</code></pre>
+data$language &lt;- NULL
+data$reviewer &lt;- NULL
+data$review.id &lt;- 1:nrow(data)</code></pre>
 <p>With that, we are now ready to start exploratory data analysis!</p>
 </div>
 <div id="exploratory-data-analysis" class="section level1">
 <h1>Exploratory data analysis</h1>
 <p>Let’s start by looking at the distribution of ratings. As we can see, the ratings are rather unbalanced, something to keep in mind in future analyses.</p>
-<pre class="r"><code>barplot(table(as.factor(data$rating)),ylim = c(0,5000), main = &quot;Distribution of ratings&quot;)</code></pre>
+<pre class="r"><code>barplot(table(as.factor(data$rating)),
+        ylim = c(0,5000), 
+        main = &quot;Distribution of ratings&quot;)</code></pre>
 <div class="figure">
 <img src="data:image/png;base64,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" alt />
 
 </div>
 <p>Let’s take a look at the distribution of the length of reviews.</p>
-<pre class="r"><code>data$review_length = nchar(data$review)
-hist(data$review_length, ylim = c(0,5000), main = &quot;Distribution of review length&quot; )</code></pre>
+<pre class="r"><code>data$review.length = nchar(data$review)
+hist(data$review.length, 
+     ylim = c(0,5000), 
+     main = &quot;Distribution of review length&quot; )</code></pre>
 <div class="figure">
 <img src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAmAAAAFmCAMAAAD9BNZiAAAAilBMVEUAAAAAADoAAGYAOjoAOpAAZrY6AAA6ADo6AGY6OgA6Ojo6OpA6kLY6kNtmAABmADpmOpBmZgBmZmZmkJBmtrZmtv+QOgCQOjqQkGaQtpCQ27aQ29uQ2/+2ZgC2Zma2kDq225C2/7a2/9u2///bkDrb25Db/7bb/9vb////tmb/25D//7b//9v///9Zux7eAAAACXBIWXMAAA7DAAAOwwHHb6hkAAAOoklEQVR4nO2dDXujuBVGnWzs3X7g2W7rdNuGttvQabDD//971RcgsCFowott5pznmQwWoGuiM5K49ohNBSBkc+03AOsGwUAKgoEUBAMpCAZSEAykIBhIQTCQgmAgBcFACoKBFAQDKQgGUhAMpCAYSEEwkIJgIAXBQAqCgRQEAykIBlIQDKQgGEhBMJCCYCAFwUAKgoEUBAMpCAZSEAykIBhIQTCQsgLBio3n6c28eH/2f0f887XZ9HvzzeNrdRFz6IUKRslN5O3Hh02pNiG0vaZi8/Ay7ehrsiLBNpvDhUY67R+nCuYOTRSstHGzj4+bVTB/TQi2EK1gl37hF2waEmy4ZxsLPl8rTxbMv1EEW4jCe3Ha27EqNFJRj5l2BDP7TWP8bbd5+Efdg/22D0OqbytzbhYO/U9o5eOu7ppsQ+Zde5udeeR1iPHSDpu532WOzmp5wi7/MhTmwaveMf3Ibsu+3/aa+u/rBlmPYNaSpzffSKFTM+VNYzjj/hcEa3YPCla087q6h2xbst3ZFcwXWtN97aUbtZ0n/n21u9ybNi/NuS64pX9MJ7LZabd+FwvWXsbtsiLB3IZrJNNGWzc9ytrhxLlSz8Hsz9J1E5FgftsfYjod72nmznVGNFOt7s7GuyLuFF2N/n24GqPZn9t13JnzSjdvNNUdXAX9YzqR67fr/9W011RMmgJej3UJFnoK02TNP+umMWwj1k3opMjbtjoTLEzH8tDAB2fVtlNlvTMWzMYIHVLR9FN2hKxq8etd5nVmNn5xP8Ob7R/Tidy80ViwQ9X2fzfKKgXzw4n/xXcmxB17XNllwerZkDvEn+t7o6pqp0rRziZ8FeZnYWBznVPZVBvvyk11uZm0bd1WW3F8TBS5nZ9FgnXf122ySsHqeYz9F35RsFYQv9t1MpFgdau5SVS/IS/sbMJXIXERDDGVBYFctfGu0s4Izc2GnfT5EfL8mChyHRTBlqcWzLRPmIP50noaPqEH6wv2yR7sEL83c8N6aHunZtdpb7qvpzfbidU1nB1DD3YTBMHsuFg3xPtfe5OsnmCuDaM5VHQ/cGkO1mvIwTmY2+y0uNHoV3d0p2Os/Fv5JUzD6uTX2TFx5EtzMARbhE6ite4FmiyTb4a+YD6HsK38TZh1MwsHXbqL7DXk4F2k33T+upxJ1ea0IrXDrsIN4eWmvQs8OyaOHN9FxteEYHIufFRUtPmjsklKVlETNgmkZk6dhUO7ebBtdakhz3aGUr8ZJoD+RbmJI8e7jrtwG9BUcHZMHDnKg3WuCcHkXPqw23njp2Yu2d2fgzWZfHfk09d9nZcPyf5Qw8HXf9aQ/Z1VZ9O5EMa9uicL7yva5aaM4WdVn9c9phvZ9V55SA8314RgMCd5M2O7ExDsTsjdKB6le+8EBLsT6vzYjX+2fQaC3Qt+8n9nAySCgRgEAykIBlIQDKQgGEhBMJCCYCAFwUAKgoEUBAMpCAZSEAykIBhIQTCQgmAgBcFACoKBFAQDKQgGUhAMpCAYSEEwkIJgIAXBQAqCgRQEAykIBlIQDKQgGEhBMJCCYCAFwUAKgoEUBAMp8wjWrFSPr9BlZiMQDLogGEhBMJCCYCAFwUAKgoEUBAMpCAZSEAykIBhIQTCQgmAgBcFAilywzQDzxoVbRS/YInHhVkEwkJLW0O/Pfnx7fJ1cHYJ93yQ1dLHJ/EZZb3xcHYJ936Q09PtzVm8WT28Tq0Ow75uUhj7tD/VmOTBIIhh0oQcDKYlzsNCFMQeDiaQ19Gnv7yIH+i8Egz7kwUAKgoEUEq0ghUQrSCFNAVJItIIUejCQQqIVpJBoBSnkwUCKfIVDBPu+IdEKUki0ghTSFCCFRCtIoQcDKSRaQQqJVpBCohWkIBhI+ZaGPu4OQ7sQDLqkpSnaj4RIU8Akkho63DzSg8FkmoY23dP2w6NPe3v/iGAwmaihCzPyZR8dnz+8IBhMp9vQExwrNhmCwWT6DV2MfRnHcdz9gGAwlU5Dl8auQ/X+PJiod7w/bxAMJtI2tE1CeLOGviqRVN1wyVgxrI3oLtJM3+erbqRkrBjWBh8VgZSooXMzQA5+Dye9usGSsWJYG21D524Cdtp/nG6dVN1wyVgxrI1oDuZvDT8xw68QDPo0DV1/H7pAMJiRtqH996GPu2ye6oZLxophbUQNfdxtNptP5ioQDLqQpgApCAZS2ob+cN2JtOqGS8aKYW1EebBPmXVW3XDJWDGsjSgPls1Z3UjJWDGsjbNE60zVjZSMFcPaiBKtn/iMiAXoYIC2ocvhrxF+S3XDJWPFsDbi/1XEXSTMDnkwkIJgICVqaDNIPr3l2VzVDZaMFcPaiCb5Dy/F09sn02EIBl063wezC2PyfTCYk06i1QrGN1phTs56sHz8f91OrW6kZKwY1kZ/DlZ8Lt2KYNClexfJN1phZsiDgRQEAyl8FglS+g39uSwFgkGPs4bOWToAZuSsoUe7MB5IComcNfTYR0U8kBRS6Tf02Oo6PM4Pkjm7ixz5pIgHkkIyKQ1NDwbJJDU0DySFVM4TrWM3iTyQFBLp/7c1vk0BsxJ9H8ybNTS7SqxupGSsGNZGO0R+8V/UIdEKc3LWg419o5VEK6TS+Uar+VmMfOOQNAUk0/9G69gMjEQrJEOiFaSQaAUpaUsHkGiFRFg6AKTMs3QAKxzCAGlLB5BohUSSlg4g0QqppCwdQJoCkklZOoBEKyRDohWkdOZgH0GiFVLp3EV+CIlWSCSa5PMwLJgfFj8BKWkNXRgB3Ug6lO+fLtgASW8Hbp+0b1M8vIT/+v15wWZ4O3AH+Bad9iw/f6P5/jzyiSWCQZdIsA8TFbWG+dMbgsE0UgRrDsi3CAbTSBGsGRjNHSeCwSSSBGtS+e/PCAaTSBNsYnXjJd9QDHcLgoGUWrAJS+tMr2685BuK4W6ZuUURDLogGEhBMJCCYCAFwUAKgoEUBAMpCAZSEAykIBhIQTCQgmAgBcFAyjwtOtsCdAi2NujBQAqCgRQEAykIBlIQDKQgGEhBMJCCYCDl1gRj1bCVcWuCpRwMdwCCgRQEAykIBlIQDKQgGEhBMJCCYCAFwUAKgoEUBAMp9yEYH1HeLfchWFIdcEsgGEhBMJCCYCAFwUAKgoGUuxaM7MXtc9eCJRXDVUAwkJLWGu/PHzww6yYEY+C8IZJ+78Um8xtlvfFxdbfSgyHYdUj5vUcPlCye3iZWdzOCzcFAQLrMYVJ+De6xpZ6yO0iO/FZnaVi4MssINqEHA+iSOAcLXdjgHAygS1rnVz96mf4LJsJUFKQgGEhBMJAiF+y6t9cwD59o//lUulKA60ckoObUGwlw/YgE1Jx6IwGuH5GAmlNvJMD1IxJQc+qNBLh+RAJqTr2RANePSEDNqTcS4PoRCag59UYCXD8iATWn3kiA60ckoOZUgI9BMJCCYCAFwUAKgoEUBAMpCAZSEAykIBhIQTCQgmAgBcFACoKBFK1g5Wbz8CKNUC9nsI2jnW/Mx/Gn18shVEF9wKWu0i0xmF2u/psCSgUrzdso1YYdf3zpRTvfmI/T3i1cNRJr5qAh4EJX+f5sKiqsyHNdoVIwv9xTvhWGqNqlyppo5xszBvPLh47EmjloCLjUVR53dv2k4vF1titUCta8W2EMU/+2F+18Y7ZY5SZzLT0Sa96gdcBFr9J2T7NdoVQw162XYsHy3/tZQxPtfGPOcF6w4VizB/VVLXqV+eiFpQVUCubHafEk7LS3i5XlWRvtfGPOeO4XOxJr9qAu4KJXaZcXnO0K716wEOrxddWCNZtLBKzn+Dcv2DJDpA+1O6x7iHQscpV+edS7GCKXmeT7UD+OTUvnjLTsJL/qCrbAVYZnIdzFJH+RNIW/3HL0xnpOymXTFB2jF7jKep3nu0hTLJNodVdqpr/LJFpDh7JcorW+i1zmKo+7rA57B4lW++9B/1FRlZsb+EMn2vnGfIQRayTWzEFDwGWusvALGtrqZrpCPuwGKQgGUhAMpCAYSEEwkIJgIAXBQAqCgRQEAykIBlIQDKQgGEhBMJCCYCAFwUAKgoEUBAMpCAZSEAykIBhIQTCQgmAgBcFACoKBFAQDKQgGUhBsTk4/v137LdwaCNbjtD9cLH9/DuWdZT/KzsF5vQR4Qr2nLwusz3dFEKzHkAj1KrwdwboH54+//fzf3eXThymfVt3rIViPAcHa4kHBjruDGSLzVF+arnGdfPeCnfZ/2fuFkQr3KI3T/s87/zosmHT68uvm8TUsJr7ZPPxqBfP7juZI41M40AtW1We4+rJ66biHv+/rGJlxyq6Cas+xOhar7sIQbG+fbRH+nPZZ89ou+ebL3ALPbgE4o0256ew7VPGBX71g7gxbdNxlTiYj0ld7aChzTtnnabjFAhdZJflqINg+852P/Tt+bSfftvtxBXWpOSB/eIn2HarmhevQtnUVvj7T8dnFTJ24h7bMOpX/8vTm1tM9Jk/b7gkEsz2L+VE3c/3abpd26GsL2tUzO/vqF5V/ZFUWDnaHOXMP9kX4qyk7ffnbT69hDfxs+cteDASrBQtPm2p8MtOlx3+HXsr3MkUjWGdf/aJyeTAzjHrB/GKURjwzhJqplhOsLcuOf/j65SVvOrzVgmADPVgY9C72YJ19zYvKCWZEjXowS/n4294f2pYVT/8y2v3R3UAi2Kqp/WnnYP61f6JHO0RmzdrxDy+dfc0LOw7+/BZGwyiDcdr/4qZhh6js+NOfzFT/hx/DkLn4VS8HgjVDoulezC1f3IOZKVWYUfm7SHuIvYuM9mVV9MLcRX7db8MZhUtn+JzGNsRpyty9arlxCQruIldN293UebB2Dvbwkof+qOrmwep9xp2nt+aFe1rstum8bH1+UN00PVpTZjMeYVF68mAw/AlS76hv+LB7Ws13C4JNpFA9EYfPIsGi+siQb1MAfAIEAykIBlIQDKQgGEhBMJCCYCAFwUAKgoEUBAMpCAZSEAykIBhIQTCQgmAgBcFACoKBFAQDKQgGUhAMpCAYSPk/rpcnfmBxO0sAAAAASUVORK5CYII=" alt />
 
 </div>
 <p>Now that’s a long tail! A quick calculation let us know that there are only 45 reviews that are more than 8000 character long. Let’s get rid of them, to avoid skewing our analyses (e.g. if one of these reviews uses a lot a word, it could bias the weight for that word).</p>
-<pre class="r"><code>n=nrow(data[data$review_length&gt;=8000])
-data=data[data$review_length&lt;=8000]
-hist(data$review_length, ylim = c(0,3000), main = &quot;Distribution of review length&quot; )</code></pre>
+<pre class="r"><code>n &lt;- nrow(data[data$review.length &gt;= 8000])
+data &lt;- data[data$review.length &lt;= 8000]
+hist(data$review_length, 
+     ylim = c(0,3000), 
+     main = &quot;Distribution of review length&quot; )</code></pre>
 <div class="figure">
 <img src="data:image/png;base64,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" alt />
 
 </div>
 <p>This looks better. Finally, let’s take a look at the distribution of review length by rating.</p>
-<pre class="r"><code>with(data, boxplot(review_length~rating, main = &quot;Distribution of review length by rating&quot;))</code></pre>
+<pre class="r"><code>with(data, boxplot(review.length~rating, 
+                   main = &quot;Distribution of review length by rating&quot;))</code></pre>
 <div class="figure">
 <img src="data:image/png;base64,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" alt />
 
@@ -213,7 +224,7 @@ head(Bing)</code></pre>
 <pre class="r"><code># &quot;tidying&quot; up the data (1 word per row) and adding the sentiment scores for each word
 review_words &lt;- data %&gt;%
   unnest_tokens(word, review) %&gt;%
-  select(-c(book,review_length)) %&gt;%
+  select(-c(book, review_length)) %&gt;%
   left_join(AFINN, by = &quot;word&quot;) %&gt;%
   left_join(Bing, by = &quot;word&quot;)</code></pre>
 <p>Our data now looks like this:</p>
@@ -255,7 +266,7 @@ review_words &lt;- data %&gt;%
 <pre class="r"><code># Grouping by mean for observation 
 review_mean_sentiment &lt;- review_words %&gt;%
   group_by(review_id, rating) %&gt;%
-  summarize(mean_sentiment = mean(afinn_score, na.rm=TRUE))</code></pre>
+  summarize(mean_sentiment = mean(afinn_score, na.rm = TRUE))</code></pre>
 <p>The outcome looks like this:</p>
 <table>
 <thead>
@@ -285,7 +296,7 @@ review_mean_sentiment &lt;- review_words %&gt;%
 </table>
 <p>So, how does the average sentiment score vary by rating?</p>
 <pre class="r"><code>theme_set(theme_bw())
-ggplot(review_mean_sentiment, aes(rating, mean_sentiment, group = rating)) +
+ggplot(review.mean.sentiment, aes(rating, mean.sentiment, group = rating)) +
   geom_boxplot() +
   ylab(&quot;Average sentiment score&quot;)</code></pre>
 <div class="figure">
@@ -293,17 +304,17 @@ ggplot(review_mean_sentiment, aes(rating, mean_sentiment, group = rating)) +
 
 </div>
 <p>We’re onto something! Visually at least, we can see a difference across ratings, with the sentiment score for 1-star reviews being squarely negative and the sentiment score for 5-star reviews being squarely positive. Let’s create a new dataset to integrate this feature for future use (note that some reviews are too short or use no word recorded in our lexicons, so they don’t have a score).</p>
-<pre class="r"><code>review_mean_sentiment &lt;- review_mean_sentiment %&gt;%
+<pre class="r"><code>review.mean.sentiment &lt;- review.mean.sentiment %&gt;%
   select(-rating) %&gt;% # We remove the rating here to avoid duplicating it
   data.table()
-clean_data &lt;- data %&gt;%
-  left_join(review_mean_sentiment, by = &quot;review_id&quot;)</code></pre>
+clean.data &lt;- data %&gt;%
+  left_join(review.mean.sentiment, by = &quot;review.id&quot;)</code></pre>
 <p>The difference between ratings is even clearer if we take the median score instead of the mean:</p>
-<pre class="r"><code>review_median_sentiment &lt;- review_words %&gt;%
-  group_by(review_id, rating) %&gt;%
-  summarize(median_sentiment = median(afinn_score, na.rm = TRUE))
+<pre class="r"><code>review.median.sentiment &lt;- review.words %&gt;%
+  group_by(review.id, rating) %&gt;%
+  summarize(median.sentiment = median(afinn.score, na.rm = TRUE))
 theme_set(theme_bw())
-ggplot(review_median_sentiment, aes(rating, median_sentiment, group = rating)) +
+ggplot(review.median.sentiment, aes(rating, median.sentiment, group = rating)) +
   geom_boxplot() +
   ylab(&quot;Median sentiment score&quot;)</code></pre>
 <div class="figure">
@@ -311,22 +322,70 @@ ggplot(review_median_sentiment, aes(rating, median_sentiment, group = rating)) +
 
 </div>
 <p>Again, let’s transfer this feature to our new dataset.</p>
-<pre class="r"><code>review_median_sentiment &lt;- review_median_sentiment %&gt;%
+<pre class="r"><code>review.median.sentiment &lt;- review.median.sentiment %&gt;%
   select(-rating) %&gt;%
   data.table()
-clean_data &lt;- clean_data %&gt;%
-  left_join(review_median_sentiment, by = &quot;review_id&quot;)</code></pre>
+clean.data &lt;- clean.data %&gt;%
+  left_join(review.median.sentiment, by = &quot;review.id&quot;)</code></pre>
+<p>Last but not least, we are going to count the number of negative and positive words in each review, according to the two lexicons, for use in the machine learning algorithm.</p>
+<pre class="r"><code># Counting the number of negative words per review according to AFINN lexicon
+review.count.afinn.negative &lt;- review.words %&gt;%
+  filter(afinn.score &lt; 0) %&gt;%
+  group_by(review.id, rating) %&gt;%
+  summarize(count.afinn.negative = n())
+# Transferring the results to our dataset
+review.count.afinn.negative &lt;- review.count.afinn.negative %&gt;%
+  select(-rating) %&gt;%
+  data.table()
+clean.data &lt;- clean.data %&gt;%
+  left_join(review.count.afinn.negative, by = &quot;review.id&quot;)
+
+# Counting the number of positive words per review according to AFINN lexicon
+review.count.afinn.positive &lt;- review.words %&gt;%
+  filter(afinn.score &gt; 0) %&gt;%
+  group_by(review.id, rating) %&gt;%
+  summarize(count.afinn.positive = n())
+# Transferring the results to our dataset
+review.count.afinn.positive &lt;- review.count.afinn.positive %&gt;%
+  select(-rating) %&gt;%
+  data.table()
+clean.data &lt;- clean.data %&gt;%
+  left_join(review.count.afinn.positive, by = &quot;review.id&quot;)
+
+# Counting the number of negative words per review according to Bing lexicon
+review.count.bing.negative &lt;- review.words %&gt;%
+  filter(bing.sentiment == &quot;negative&quot;) %&gt;%
+  group_by(review.id, rating) %&gt;%
+  summarize(count.bing.negative = n())
+# Transferring the results to our dataset
+review.count.bing.negative &lt;- review.count.bing.negative %&gt;%
+  select(-rating) %&gt;%
+  data.table()
+clean.data &lt;- clean.data %&gt;%
+  left_join(review.count.bing.negative, by = &quot;review.id&quot;)
+
+# Counting the number of positive words per review according to Bing lexicon
+review.count.bing.positive &lt;- review.words %&gt;%
+  filter(bing.sentiment == &quot;positive&quot;) %&gt;%
+  group_by(review.id, rating) %&gt;%
+  summarize(count.bing.positive = n())
+# Transferring the results to our dataset
+review.count.bing.positive &lt;- review.count.bing.positive %&gt;%
+  select(-rating) %&gt;%
+  data.table()
+clean.data &lt;- clean.data %&gt;%
+  left_join(review.count.bing.positive, by = &quot;review.id&quot;)</code></pre>
 <p>Finally, we save our data to a file for future use.</p>
-<pre class="r"><code>write.csv(clean_data, &quot;GoodReadsCleanData.csv&quot;, row.names = FALSE)</code></pre>
+<pre class="r"><code>write.csv(clean.data, &quot;GoodReadsCleanData.csv&quot;, row.names = FALSE)</code></pre>
 <p>Just for exploratory purposes, we are now going to slice our data the other way around, aggregating not by review but by word. First, for each word, we are going to count in how many reviews it appears and how many times it appears overall, as well as calculate the average rating of the reviews in which it appears. Finally, we filter our data to keep only the words that appears in at least 3 reviews, to avoid words that would be peculiar to a specific reviewer.</p>
-<pre class="r"><code>word_mean_summaries &lt;- review_words %&gt;%
-  count(review_id, rating, word) %&gt;%
+<pre class="r"><code>word.mean.summaries &lt;- review.words %&gt;%
+  count(review.id, rating, word) %&gt;%
   group_by(word) %&gt;%
   summarize(reviews = n(),
             uses = sum(n),
-            average_rating = mean(rating)) %&gt;%
+            average.rating = mean(rating)) %&gt;%
   filter(reviews &gt;= 3) %&gt;%
-  arrange(average_rating)</code></pre>
+  arrange(average.rating)</code></pre>
 <p>The outcome looks like this:</p>
 <table>
 <thead>
@@ -359,10 +418,10 @@ clean_data &lt;- clean_data %&gt;%
 </tbody>
 </table>
 <p>And finally, we can compare the average rating in the previous table with the AFINN score for the word:</p>
-<pre class="r"><code>word_mean_afinn &lt;- word_mean_summaries %&gt;%
+<pre class="r"><code>word.mean.afinn &lt;- word.mean.summaries %&gt;%
   inner_join(AFINN)
 
-ggplot(word_mean_afinn, aes(afinn_score, average_rating, group = afinn_score)) +
+ggplot(word.mean.afinn, aes(afinn.score, average.rating, group = afinn.score)) +
   geom_boxplot() +
   xlab(&quot;AFINN score of word&quot;) +
   ylab(&quot;Mean rating of reviews with this word&quot;)</code></pre>

@@ -148,17 +148,21 @@ library(rvest)        # Required for read_html
 library(RSelenium)    # Required for webscraping with javascript
 
 url &lt;- &quot;https://www.goodreads.com/book/show/18619684-the-time-traveler-s-wife#other_reviews&quot;
-BookTitle &lt;- &quot;The time traveler's wife&quot;
-OutputFileName &lt;- &quot;GR_TimeTravelersWife.csv&quot;</code></pre>
+book.title &lt;- &quot;The time traveler's wife&quot;
+output.filename &lt;- &quot;GR_TimeTravelersWife.csv&quot;</code></pre>
 <p>Note that I’m working on a book-by-book basis. This means we have to manually change the variables above and re-run the script for each book. This could be automated to work on a grander scale, but that’s good enough for what I want to do here. Also, I’d rather not overload Goodreads’s servers by pulling massive amounts of data from them.</p>
 <p>Let’s then start the RSelenium server. I have had some trouble with Firefox, and I have had to reinstall a previous version of the browser (which Firefox frowns upon), so your mileage may vary here.</p>
 <pre class="r"><code>startServer()
-remDr &lt;- remoteDriver(browserName=&quot;firefox&quot;, port=4444) # instantiate remote driver to connect to Selenium Server
+remDr &lt;- remoteDriver(browserName = &quot;firefox&quot;, port = 4444) # instantiate remote driver to connect to Selenium Server
 remDr$open() # open web browser
 remDr$navigate(url)</code></pre>
 <p>These instructions start an instance of Firefox and navigate to the url as if you were directly interacting with the browser.</p>
 <p>We then initialize the data frame that we’ll be populating with the data later.</p>
-<pre class="r"><code>global_df &lt;- data.frame(book=character(),reviewer=character(),rating=character(),review=character(), stringsAsFactors = F)</code></pre>
+<pre class="r"><code>global.df &lt;- data.frame(book=character(),
+                        reviewer = character(),
+                        rating = character(),
+                        review = character(), 
+                        stringsAsFactors = F)</code></pre>
 <p>We are now ready to proceed with the webscraping process itself!</p>
 </div>
 <div id="the-webscraping-process" class="section level1">
@@ -167,18 +171,18 @@ remDr$navigate(url)</code></pre>
 <p>First, we need to identify “where” the reviews appear in the page code. This is done by using <a href="http://selectorgadget.com/">SelectorGadget</a>, a Chrome extension that allows you to identify CSS selectors. Once we have identified the proper CSS selector (here <em>“#bookReviews .stacked”</em>), we just pass its name to the <em>findElements</em> function of the RSelenium server.</p>
 <pre class="r"><code>reviews &lt;- remDr$findElements(&quot;css selector&quot;, &quot;#bookReviews .stacked&quot;)</code></pre>
 <p>We extract the html code for the reviews, then the text component.</p>
-<pre class="r"><code>reviews_html &lt;- lapply(reviews, function(x){x$getElementAttribute(&quot;outerHTML&quot;)[[1]]})
-reviews_list &lt;- lapply(reviews_html, function(x){read_html(x) %&gt;% html_text()} )
-reviews_text &lt;- unlist(reviews_list)</code></pre>
+<pre class="r"><code>reviews.html &lt;- lapply(reviews, function(x){x$getElementAttribute(&quot;outerHTML&quot;)[[1]]})
+reviews.list &lt;- lapply(reviews.html, function(x){read_html(x) %&gt;% html_text()})
+reviews.text &lt;- unlist(reviews.list)</code></pre>
 <p>We now have the text of the reviews in list format, but a rapid inspection of it shows that there is still a lot of work to do to get a clean text. This we will do by using regular expressions (regex).</p>
 </div>
 <div id="cleaning-the-reviews-with-regex" class="section level1">
 <h1>Cleaning the reviews with Regex</h1>
 <p>In my experience with text analytics, regex are both a blessing and a curse. A blessing because how else can you remove all non-letters characters in a string in one short command? And a curse because it’s a fairly esoteric language that is hard to understand or remember when you re-read your code later. So if you are not familiar with regex, I would definitely advise very generous commenting at the brief moment in time when you actually understand what your code does.</p>
 <pre class="r"><code># Removing all characters that are not letters or dash
-reviews_text2&lt;- gsub(&quot;[^A-Za-z\\-]|\\.+&quot;,&quot; &quot;,reviews_text)
+reviews.text2 &lt;- gsub(&quot;[^A-Za-z\\-]|\\.+&quot;, &quot; &quot;, reviews.text)
 # Removing the end of line characters and extra spaces
-reviews_clean &lt;- gsub(&quot;\n|[ \t]+&quot;,&quot; &quot;,reviews_text2)  </code></pre>
+reviews.clean &lt;- gsub(&quot;\n|[ \t]+&quot;, &quot; &quot;, reviews.text2)  </code></pre>
 <p>In order to write these commands, I have found these resources useful:</p>
 <ul>
 <li><a href="http://www.regular-expressions.info/" class="uri">http://www.regular-expressions.info/</a></li>
@@ -190,8 +194,12 @@ reviews_clean &lt;- gsub(&quot;\n|[ \t]+&quot;,&quot; &quot;,reviews_text2)  </c
 <h1>Putting the reviews in table format</h1>
 <p>We now have our reviews in a reasonably clean state. But due to the underlying structure of the html code, we have a problem: for each review, we have the name of the reviewer and his/her rating in one string, and the review in the following string. In addition to that, the system to preview reviews means that the beginning of the review appears twice in the string. We’ll have to clean all that, again using regex, to get our data in table format.</p>
 <p>We start by counting the number of reviews we have, i.e. half the number of strings and creating a temporary data frame that we’ll use to store the data before transferring it to the main data frame.</p>
-<pre class="r"><code>n=floor(length(reviews)/2)
-reviews_df=data.frame(book=character(n),reviewer=character(n),rating=character(n),review=character(n), stringsAsFactors = F)</code></pre>
+<pre class="r"><code>n &lt;- floor(length(reviews)/2)
+reviews.df &lt;- data.frame(book = character(n),
+                         reviewer = character(n),
+                         rating = character(n),
+                         review = character(n), 
+                         stringsAsFactors = F)</code></pre>
 <p>We loop through our strings and populate our data frame, by extracting the fields we want review by review, based on recurring stop words. A <em>for</em> loop will do for this non-production example, but for production code you’d probably want to vectorialize everything you can.</p>
 <p>The following code might appear a bit cryptic so first I’ll explain what I’m going to do:</p>
 <ul>
@@ -201,34 +209,36 @@ reviews_df=data.frame(book=character(n),reviewer=character(n),rating=character(n
 <li>Finally, note the structure of the loop: I’m not looping through the strings one by one, but through the reviews, each review taking 2 consecutive strings, hence the <code>2*j</code> and <code>2*j-1</code> indices.</li>
 </ul>
 <pre class="r"><code>for(j in 1:n){
-  reviews_df$book[j]=BookTitle
+  reviews.df$book[j] &lt;- book.title
     
   #Isolating the name of the author of the review
-  auth_rat_sep=regexpr(&quot; rated it | marked it | added it &quot;,reviews_clean[2*j-1]) 
-  reviews_df$reviewer[j]=substr(reviews_clean[2*j-1],5,auth_rat_sep-1)
+  auth.rat.sep &lt;- regexpr(&quot; rated it | marked it | added it &quot;, 
+                          reviews.clean[2*j-1]) 
+  reviews.df$reviewer[j] &lt;- substr(reviews.clean[2*j-1], 5, auth.rat.sep-1)
     
   #Isolating the rating
-  rat_end=regexpr(&quot;· | Shelves| Recommend| review of another edition&quot;,reviews_clean[2*j-1])
-  if (rat_end==-1){rat_end=nchar(reviews_clean[2*j-1])}
-  reviews_df$rating[j]=substr(reviews_clean[2*j-1],auth_rat_sep+10,rat_end-1)
+  rat.end &lt;- regexpr(&quot;· | Shelves| Recommend| review of another edition&quot;,
+                     reviews.clean[2*j-1])
+  if (rat.end==-1){rat.end &lt;- nchar(reviews.clean[2*j-1])}
+  reviews.df$rating[j] &lt;- substr(reviews.clean[2*j-1], auth.rat.sep+10, rat.end-1)
     
   #Removing the beginning of each review that was repeated on the html file
-  short_str=substr(reviews_clean[2*j], 1, 50)
-  rev_start=unlist(gregexpr(short_str, reviews_clean[2*j]))[2]
-  if (is.na(rev_start)){rev_start=1}
-  rev_end=regexpr(&quot;\\.+more|Blog&quot;,reviews_clean[2*j])
-  if (rev_end==-1){rev_end=nchar(reviews_clean[2*j])}
-  reviews_df$review[j]=substr(reviews_clean[2*j],rev_start,rev_end-1)
+  short.str &lt;- substr(reviews.clean[2*j], 1, 50)
+  rev.start &lt;- unlist(gregexpr(short.str, reviews.clean[2*j]))[2]
+  if (is.na(rev.start)){rev.start &lt;- 1}
+  rev.end &lt;- regexpr(&quot;\\.+more|Blog&quot;, reviews.clean[2*j])
+  if (rev.end==-1){rev.end &lt;- nchar(reviews.clean[2*j])}
+  reviews.df$review[j] &lt;- substr(reviews.clean[2*j], rev.start, rev.end-1)
   }</code></pre>
 <p>Now that our temporary data frame has been populated, we can transfer its content to our main data frame.</p>
-<pre class="r"><code>global_lst=list(global_df, reviews_df)
-global_df=rbindlist(global_lst)</code></pre>
+<pre class="r"><code>global.lst &lt;- list(global.df, reviews.df)
+global.df &lt;- rbindlist(global.lst)</code></pre>
 <p>And finally, we tell RSelenium to “click” on the <em>next page</em> button, by passing the proper CSS selector that we identified with SelectorGadget. Final trick: I found that in the initial iterations, RSelenium was too slow to load the pages, and was not responding in time to the instructions at the beginning of the next loop, so we tell R to wait 3 seconds at the end of each loop.</p>
 <pre class="r"><code>NextPageButton &lt;- remDr$findElement(&quot;css selector&quot;, &quot;.next_page&quot;)
 NextPageButton$clickElement()
 Sys.sleep(3)</code></pre>
 <p>After closing the overall loop, we can save the final data frame in a file.</p>
-<pre class="r"><code>write.csv(global_df,OutputFileName)</code></pre>
+<pre class="r"><code>write.csv(global.df,output.filename)</code></pre>
 <p>The result data frame looks like this:</p>
 <table style="width:112%;">
 <colgroup>
