@@ -15,4 +15,4 @@ Part 2: Exploratory Data Analysis (EDA) and sentiment analysis
 Part 3: Predictive Analytics / Machine learning
 - GR_article_part3.Rmd = R markdown of the article
 - GR_article_part3.html = html of the article
-- GR_MachineLearning.R = R script of the analyses (work in progress!)
+- GR_MachineLearning.R = R script of the analyses
