@@ -32,15 +32,15 @@ library(RTextTools)
 ```
 
 ```{r, eval=FALSE}
-data = read.csv("GoodReadsData.csv", stringsAsFactors = FALSE)
-data=data.table(data)
+data <- read.csv("GoodReadsData.csv", stringsAsFactors = FALSE)
+data <- data.table(data)
 ```
 
 After a quick inspection of the data, we realize that some reviews are not in English. We get rid of them. 
 
 ```{r, eval=FALSE}
-data$language=as.factor(textcat(data$review))
-data=data[language=="english"]
+data$language <- as.factor(textcat(data$review))
+data <- data[language == "english"]
 ```
 
 The language detection algorithm is not great and reclassifies some reviews in weird languages (6 breton? 9 rumantsch?? 103 middle frisian???), but that's good enough for what we want to do. 
@@ -48,23 +48,27 @@ The language detection algorithm is not great and reclassifies some reviews in w
 Then we exclude all ratings that do not correspond to a 1 to 5 star rating (such as "currently reading it", or an empty rating) and all reviews that are too short.
 
 ```{r, eval=FALSE}
-data=data[rating %in% c('did not like it','it was ok','liked it','really liked it','it was amazing')]
-data=data[length(data$review)>=5]
+data <- data[rating %in% c('did not like it',
+                           'it was ok',
+                           'liked it',
+                           'really liked it',
+                           'it was amazing')]
+data <- data[length(data$review) >= 5]
 ```
 
 Finally, we recode the ratings in numerical format, remove the language and reviewer columns that we won't be using anymore, and add a review_id column (to be able to identify to which review a word belongs).
 
 ```{r, eval=FALSE}
-data$rating[data$rating=='did not like it']=1
-data$rating[data$rating=='it was ok']=2
-data$rating[data$rating=='liked it']=3
-data$rating[data$rating=='really liked it']=4
-data$rating[data$rating=='it was amazing']=5
-data$rating=as.integer(data$rating)
+data$rating[data$rating == 'did not like it'] <- 1
+data$rating[data$rating == 'it was ok'      ] <- 2
+data$rating[data$rating == 'liked it'       ] <- 3
+data$rating[data$rating == 'really liked it'] <- 4
+data$rating[data$rating == 'it was amazing' ] <- 5
+data$rating <- as.integer(data$rating)
 
-data$language=NULL
-data$reviewer=NULL
-data$review_id=1:nrow(data)
+data$language <- NULL
+data$reviewer <- NULL
+data$review.id <- 1:nrow(data)
 ```
 
 With that, we are now ready to start exploratory data analysis!
@@ -74,7 +78,9 @@ With that, we are now ready to start exploratory data analysis!
 Let's start by looking at the distribution of ratings. As we can see, the ratings are rather unbalanced, something to keep in mind in future analyses.
 
 ```{r, eval=FALSE}
-barplot(table(as.factor(data$rating)),ylim = c(0,5000), main = "Distribution of ratings")
+barplot(table(as.factor(data$rating)),
+        ylim = c(0,5000), 
+        main = "Distribution of ratings")
 ```
 
 ![](Barplot1.png)
@@ -82,8 +88,10 @@ barplot(table(as.factor(data$rating)),ylim = c(0,5000), main = "Distribution of 
 Let's take a look at the distribution of the length of reviews.
 
 ```{r, eval=FALSE}
-data$review_length = nchar(data$review)
-hist(data$review_length, ylim = c(0,5000), main = "Distribution of review length" )
+data$review.length = nchar(data$review)
+hist(data$review.length, 
+     ylim = c(0,5000), 
+     main = "Distribution of review length" )
 ```
 
 ![](Histogram1.png)
@@ -91,9 +99,11 @@ hist(data$review_length, ylim = c(0,5000), main = "Distribution of review length
 Now that's a long tail! A quick calculation let us know that there are only 45 reviews that are more than 8000 character long. Let's get rid of them, to avoid skewing our analyses (e.g. if one of these reviews uses a lot a word, it could bias the weight for that word).
 
 ```{r, eval=FALSE}
-n=nrow(data[data$review_length>=8000])
-data=data[data$review_length<=8000]
-hist(data$review_length, ylim = c(0,3000), main = "Distribution of review length" )
+n <- nrow(data[data$review.length >= 8000])
+data <- data[data$review.length <= 8000]
+hist(data$review_length, 
+     ylim = c(0,3000), 
+     main = "Distribution of review length" )
 
 ```
 
@@ -102,7 +112,8 @@ hist(data$review_length, ylim = c(0,3000), main = "Distribution of review length
 This looks better. Finally, let's take a look at the distribution of review length by rating. 
 
 ```{r, eval=FALSE}
-with(data, boxplot(review_length~rating, main = "Distribution of review length by rating"))
+with(data, boxplot(review.length~rating, 
+                   main = "Distribution of review length by rating"))
 ```
 
 ![](Boxplot1.png)
@@ -133,7 +144,7 @@ We then "tidy up" our dataset by making it "tall" (one word per row) and add the
 # "tidying" up the data (1 word per row) and adding the sentiment scores for each word
 review_words <- data %>%
   unnest_tokens(word, review) %>%
-  select(-c(book,review_length)) %>%
+  select(-c(book, review_length)) %>%
   left_join(AFINN, by = "word") %>%
   left_join(Bing, by = "word")
 ```
@@ -152,7 +163,7 @@ We can assign a positivity/negativity "score" to each review by calculating the 
 # Grouping by mean for observation 
 review_mean_sentiment <- review_words %>%
   group_by(review_id, rating) %>%
-  summarize(mean_sentiment = mean(afinn_score, na.rm=TRUE))
+  summarize(mean_sentiment = mean(afinn_score, na.rm = TRUE))
 ```
 
 The outcome looks like this:
@@ -167,7 +178,7 @@ So, how does the average sentiment score vary by rating?
 
 ```{r, eval=FALSE}
 theme_set(theme_bw())
-ggplot(review_mean_sentiment, aes(rating, mean_sentiment, group = rating)) +
+ggplot(review.mean.sentiment, aes(rating, mean.sentiment, group = rating)) +
   geom_boxplot() +
   ylab("Average sentiment score")
 ```
@@ -177,21 +188,21 @@ ggplot(review_mean_sentiment, aes(rating, mean_sentiment, group = rating)) +
 We're onto something! Visually at least, we can see a difference across ratings, with the sentiment score for 1-star reviews being squarely negative and the sentiment score for 5-star reviews being squarely positive. Let's create a new dataset to integrate this feature for future use (note that some reviews are too short or use no word recorded in our lexicons, so they don't have a score).
 
 ```{r, eval = FALSE}
-review_mean_sentiment <- review_mean_sentiment %>%
+review.mean.sentiment <- review.mean.sentiment %>%
   select(-rating) %>% # We remove the rating here to avoid duplicating it
   data.table()
-clean_data <- data %>%
-  left_join(review_mean_sentiment, by = "review_id")
+clean.data <- data %>%
+  left_join(review.mean.sentiment, by = "review.id")
 ```
 
 The difference between ratings is even clearer if we take the median score instead of the mean:
 
 ```{r, eval=FALSE}
-review_median_sentiment <- review_words %>%
-  group_by(review_id, rating) %>%
-  summarize(median_sentiment = median(afinn_score, na.rm = TRUE))
+review.median.sentiment <- review.words %>%
+  group_by(review.id, rating) %>%
+  summarize(median.sentiment = median(afinn.score, na.rm = TRUE))
 theme_set(theme_bw())
-ggplot(review_median_sentiment, aes(rating, median_sentiment, group = rating)) +
+ggplot(review.median.sentiment, aes(rating, median.sentiment, group = rating)) +
   geom_boxplot() +
   ylab("Median sentiment score")
 ```
@@ -201,82 +212,82 @@ ggplot(review_median_sentiment, aes(rating, median_sentiment, group = rating)) +
 Again, let's transfer this feature to our new dataset.
 
 ```{r, eval = FALSE}
-review_median_sentiment <- review_median_sentiment %>%
+review.median.sentiment <- review.median.sentiment %>%
   select(-rating) %>%
   data.table()
-clean_data <- clean_data %>%
-  left_join(review_median_sentiment, by = "review_id")
+clean.data <- clean.data %>%
+  left_join(review.median.sentiment, by = "review.id")
 ```
 
 Last but not least, we are going to count the number of negative and positive words in each review, according to the two lexicons, for use in the machine learning algorithm.
 
 ```{r, eval = FALSE}
 # Counting the number of negative words per review according to AFINN lexicon
-review_count_afinn_negative <- review_words %>%
-  filter(afinn_score < 0) %>%
-  group_by(review_id, rating) %>%
-  summarize(count_afinn_negative = n())
+review.count.afinn.negative <- review.words %>%
+  filter(afinn.score < 0) %>%
+  group_by(review.id, rating) %>%
+  summarize(count.afinn.negative = n())
 # Transferring the results to our dataset
-review_count_afinn_negative <- review_count_afinn_negative %>%
+review.count.afinn.negative <- review.count.afinn.negative %>%
   select(-rating) %>%
   data.table()
-clean_data <- clean_data %>%
-  left_join(review_count_afinn_negative, by = "review_id")
+clean.data <- clean.data %>%
+  left_join(review.count.afinn.negative, by = "review.id")
 
 # Counting the number of positive words per review according to AFINN lexicon
-review_count_afinn_positive <- review_words %>%
-  filter(afinn_score > 0) %>%
-  group_by(review_id, rating) %>%
-  summarize(count_afinn_positive = n())
+review.count.afinn.positive <- review.words %>%
+  filter(afinn.score > 0) %>%
+  group_by(review.id, rating) %>%
+  summarize(count.afinn.positive = n())
 # Transferring the results to our dataset
-review_count_afinn_positive <- review_count_afinn_positive %>%
+review.count.afinn.positive <- review.count.afinn.positive %>%
   select(-rating) %>%
   data.table()
-clean_data <- clean_data %>%
-  left_join(review_count_afinn_positive, by = "review_id")
+clean.data <- clean.data %>%
+  left_join(review.count.afinn.positive, by = "review.id")
 
 # Counting the number of negative words per review according to Bing lexicon
-review_count_bing_negative <- review_words %>%
-  filter(bing_sentiment == "negative") %>%
-  group_by(review_id, rating) %>%
-  summarize(count_bing_negative = n())
+review.count.bing.negative <- review.words %>%
+  filter(bing.sentiment == "negative") %>%
+  group_by(review.id, rating) %>%
+  summarize(count.bing.negative = n())
 # Transferring the results to our dataset
-review_count_bing_negative <- review_count_bing_negative %>%
+review.count.bing.negative <- review.count.bing.negative %>%
   select(-rating) %>%
   data.table()
-clean_data <- clean_data %>%
-  left_join(review_count_bing_negative, by = "review_id")
+clean.data <- clean.data %>%
+  left_join(review.count.bing.negative, by = "review.id")
 
 # Counting the number of positive words per review according to Bing lexicon
-review_count_bing_positive <- review_words %>%
-  filter(bing_sentiment == "positive") %>%
-  group_by(review_id, rating) %>%
-  summarize(count_bing_positive = n())
+review.count.bing.positive <- review.words %>%
+  filter(bing.sentiment == "positive") %>%
+  group_by(review.id, rating) %>%
+  summarize(count.bing.positive = n())
 # Transferring the results to our dataset
-review_count_bing_positive <- review_count_bing_positive %>%
+review.count.bing.positive <- review.count.bing.positive %>%
   select(-rating) %>%
   data.table()
-clean_data <- clean_data %>%
-  left_join(review_count_bing_positive, by = "review_id")
+clean.data <- clean.data %>%
+  left_join(review.count.bing.positive, by = "review.id")
 ```
 
 Finally, we save our data to a file for future use.
 
 ```{r, eval = FALSE}
-write.csv(clean_data, "GoodReadsCleanData.csv", row.names = FALSE)
+write.csv(clean.data, "GoodReadsCleanData.csv", row.names = FALSE)
 ```
 
 Just for exploratory purposes, we are now going to slice our data the other way around, aggregating not by review but by word. First, for each word, we are going to count in how many reviews it appears and how many times it appears overall, as well as calculate the average rating of the reviews in which it appears. Finally, we filter our data to keep only the words that appears in at least 3 reviews, to avoid words that would be peculiar to a specific reviewer.
 
 ```{r, eval=FALSE}
-word_mean_summaries <- review_words %>%
-  count(review_id, rating, word) %>%
+word.mean.summaries <- review.words %>%
+  count(review.id, rating, word) %>%
   group_by(word) %>%
   summarize(reviews = n(),
             uses = sum(n),
-            average_rating = mean(rating)) %>%
+            average.rating = mean(rating)) %>%
   filter(reviews >= 3) %>%
-  arrange(average_rating)
+  arrange(average.rating)
 ```
 
 The outcome looks like this:
@@ -290,10 +301,10 @@ unlikeable | 9       | 12   | 1.6667
 And finally, we can compare the average rating in the previous table with the AFINN score for the word: 
 
 ```{r, eval=FALSE}
-word_mean_afinn <- word_mean_summaries %>%
+word.mean.afinn <- word.mean.summaries %>%
   inner_join(AFINN)
 
-ggplot(word_mean_afinn, aes(afinn_score, average_rating, group = afinn_score)) +
+ggplot(word.mean.afinn, aes(afinn.score, average.rating, group = afinn.score)) +
   geom_boxplot() +
   xlab("AFINN score of word") +
   ylab("Mean rating of reviews with this word")
