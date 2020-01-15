@@ -1,5 +1,5 @@
 # GoodReads_TextMining
-Webscraping and analyzing book reviews on GoodReads.
+Webscraping and analyzing book reviews on GoodReads. 01/14/202: PLEASE NOTE THAT DUE TO CHANGES TO RSELENIUM, THE WEBSCRAPING CODE IS NOW BROKEN. THIS CODE IS JUST FOR REFERENCE NOW.
 
 
 Part 1: webscraping
